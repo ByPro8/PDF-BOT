@@ -37,8 +37,8 @@
 <h3 style="margin-top:24px">2) Add to DB</h3>
 
 <select id="label">
-  <option value="good">good</option>
-  <option value="bad">bad</option>
+  <option value="real">real</option>
+  <option value="fake">fake</option>
 </select>
 
 <input id="addFile" type="file" accept="application/pdf">
@@ -75,8 +75,8 @@ File ID:
 <input id="fileId" style="width:60px">
 
 <select id="newLabel">
-  <option value="good">good</option>
-  <option value="bad">bad</option>
+  <option value="real">real</option>
+  <option value="fake">fake</option>
 </select>
 
 <button onclick="showAdminLinks()">Admin Links</button>
@@ -189,7 +189,7 @@ async function addPdf(){
   // -------- RESET FIELDS --------
 
   fileInput.value = "";        // clear file
-  labelSelect.value = "good"; // reset label
+  labelSelect.value = "real"; // reset label
   if(passInput) passInput.value = ""; // clear admin pass (optional)
 
 }
