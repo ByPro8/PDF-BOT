@@ -143,8 +143,12 @@ async function checkPdf(){
 
 async function addPdf(){
 
-  const f = document.getElementById("addFile").files[0];
-  const label = document.getElementById("label").value;
+  const fileInput = document.getElementById("addFile");
+  const labelSelect = document.getElementById("label");
+  const passInput = document.getElementById("adminPass");
+
+  const f = fileInput.files[0];
+  const label = labelSelect.value;
 
   if(!f){
     show("Pick a PDF first");
@@ -164,7 +168,14 @@ async function addPdf(){
 
   show(j.message || "Error");
 
+  // -------- RESET FIELDS --------
+
+  fileInput.value = "";        // clear file
+  labelSelect.value = "good"; // reset label
+  if(passInput) passInput.value = ""; // clear admin pass (optional)
+
 }
+
 
 
 // ---------------- DATABASE ----------------
