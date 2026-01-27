@@ -184,15 +184,26 @@ async function addPdf(){
 
   const j = await r.json();
 
-  show(j.message || "Error");
+  let text = j.message || "Error";
 
-  // -------- RESET FIELDS --------
+  // ---- HANDLE DUPLICATE ----
+  if(j.error === "DUPLICATE" && j.existing){
 
-  fileInput.value = "";        // clear file
-  labelSelect.value = "real"; // reset label
-  if(passInput) passInput.value = ""; // clear admin pass (optional)
+    const link = location.origin + j.existing.url;
 
+    text += "\n\nAlready exists:\n";
+    text += j.existing.filename + "\n";
+    text += link;
+  }
+
+  show(text);
+
+  // ---- RESET FIELDS ----
+  fileInput.value = "";
+  labelSelect.value = "real";
+  if(passInput) passInput.value = "";
 }
+
 
 
 
