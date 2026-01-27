@@ -142,25 +142,29 @@ def home(request: Request):
 
 @app.post("/check")
 async def check_pdf(file: UploadFile = File(...)):
+
     path = save_upload(file)
 
     fp = fingerprint(path)
+
     matches = get_matches(fp["template_hash"])
 
     if matches:
 
-        m = matches[0]   # first match
+        m = matches[0]
 
         return {
-        "message": "WE FOUND A MATCH: FAKE ❌",
-        "matched_with": {
-            "id": m["id"],
-            "filename": m["filename"],
-            "url": f"/open/{m['id']}"
+            "message": "WE FOUND A MATCH: FAKE ❌",
+            "matched_with": {
+                "id": m["id"],
+                "filename": m["filename"],
+                "url": f"/open/{m['id']}"
+            }
         }
-    }
 
-    return {"message": "NO MATCH FOUND ⚠️"}
+    return {
+        "message": "NO MATCH FOUND ⚠️"
+    }
 
 
 
@@ -169,8 +173,8 @@ async def add_pdf(label: str = Form(...), file: UploadFile = File(...)):
 
     label = label.lower().strip()
 
-    if label not in ["good", "bad"]:
-        return {"message": "ERROR: label must be good or bad"}
+    if label not in ["real", "fake"]:
+        return {"message": "ERROR: label must be real or fake"}
 
     path = save_upload(file)
 
@@ -263,7 +267,7 @@ async def admin_label(
     if not check_admin(password):
         return {"error": "Wrong password"}
 
-    if label not in ["good", "bad"]:
+    if label not in ["real", "fake"]:
         return {"error": "Invalid label"}
 
     conn = db()
@@ -362,7 +366,7 @@ def export_database():
 
             name = r["filename"] or os.path.basename(src)
 
-            # put into good/ or bad/
+            # put into real/ or fake/
             dest = f"{label}/{name}"
 
             z.write(src, dest)
