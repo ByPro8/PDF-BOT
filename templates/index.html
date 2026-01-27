@@ -192,7 +192,7 @@ async function addPdf(){
     const link = location.origin + j.existing.url;
 
     text += "\n\nAlready exists:\n";
-    text += j.existing.filename + "\n";
+    text += `#${j.existing.id} | ${j.existing.label.toUpperCase()} | ${j.existing.filename}\n`;
     text += link;
   }
 

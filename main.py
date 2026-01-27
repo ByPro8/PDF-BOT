@@ -140,7 +140,7 @@ def find_by_filename(name: str):
     conn = db()
 
     row = conn.execute("""
-        SELECT id, filename
+        SELECT id, filename, label
         FROM checks
         WHERE lower(filename)=lower(?)
         LIMIT 1
@@ -148,7 +148,8 @@ def find_by_filename(name: str):
 
     conn.close()
 
-    return dict(row) if row else None    
+    return dict(row) if row else None
+   
 
 
 # ---------------- ROUTES ----------------
@@ -201,17 +202,22 @@ async def add_pdf(label: str = Form(...), file: UploadFile = File(...)):
 
     if existing:
 
-        log_admin("DUPLICATE_ADD", f"{filename} (id={existing['id']})")
+        log_admin(
+        "DUPLICATE_ADD",
+        f"{filename} (id={existing['id']}, label={existing['label']})"
+    )
 
-        return {
-            "error": "DUPLICATE",
-            "message": f"❌ DUPLICATE NAME: {filename}",
-            "existing": {
-                "id": existing["id"],
-                "filename": existing["filename"],
-                "url": f"/open/{existing['id']}"
-            }
+    return {
+        "error": "DUPLICATE",
+        "message": f"❌ DUPLICATE NAME: {filename}",
+        "existing": {
+            "id": existing["id"],
+            "filename": existing["filename"],
+            "label": existing["label"],
+            "url": f"/open/{existing['id']}"
         }
+    }
+
 
     # ---- SAVE NEW ----
     path = save_upload(file)
