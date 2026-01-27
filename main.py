@@ -132,6 +132,24 @@ def log_admin(action: str, details: str = ""):
     conn.commit()
     conn.close()
 
+def find_by_filename(name: str):
+
+    if not name:
+        return None
+
+    conn = db()
+
+    row = conn.execute("""
+        SELECT id, filename
+        FROM checks
+        WHERE lower(filename)=lower(?)
+        LIMIT 1
+    """, (name.strip(),)).fetchone()
+
+    conn.close()
+
+    return dict(row) if row else None    
+
 
 # ---------------- ROUTES ----------------
 
@@ -176,6 +194,26 @@ async def add_pdf(label: str = Form(...), file: UploadFile = File(...)):
     if label not in ["real", "fake"]:
         return {"message": "ERROR: label must be real or fake"}
 
+    filename = (file.filename or "").strip()
+
+    # ---- CHECK DUPLICATE ----
+    existing = find_by_filename(filename)
+
+    if existing:
+
+        log_admin("DUPLICATE_ADD", f"{filename} (id={existing['id']})")
+
+        return {
+            "error": "DUPLICATE",
+            "message": f"❌ DUPLICATE NAME: {filename}",
+            "existing": {
+                "id": existing["id"],
+                "filename": existing["filename"],
+                "url": f"/open/{existing['id']}"
+            }
+        }
+
+    # ---- SAVE NEW ----
     path = save_upload(file)
 
     fp = fingerprint(path)
@@ -183,11 +221,12 @@ async def add_pdf(label: str = Form(...), file: UploadFile = File(...)):
     add_record(
         label,
         fp["template_hash"],
-        file.filename or "",
+        filename,
         str(path)
     )
 
     return {"message": f"ADDED AS {label.upper()} ✅"}
+
 
 
 # ----------- DATABASE VIEW -----------
