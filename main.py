@@ -39,7 +39,10 @@ def db():
 
 
 def init_db():
+
     conn = db()
+
+    # main table
     conn.execute("""
         CREATE TABLE IF NOT EXISTS checks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -50,9 +53,22 @@ def init_db():
             created_at TEXT NOT NULL
         )
     """)
+
+    # admin log table
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS admin_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            action TEXT NOT NULL,
+            details TEXT,
+            created_at TEXT NOT NULL
+        )
+    """)
+
     conn.execute("CREATE INDEX IF NOT EXISTS idx_hash ON checks(template_hash)")
+
     conn.commit()
     conn.close()
+
 
 
 init_db()
@@ -95,6 +111,22 @@ def add_record(label, template_hash, filename, path):
         path,
         datetime.utcnow().isoformat()
     ))
+    conn.commit()
+    conn.close()
+
+def log_admin(action: str, details: str = ""):
+
+    conn = db()
+
+    conn.execute("""
+        INSERT INTO admin_log(action, details, created_at)
+        VALUES(?,?,?)
+    """, (
+        action,
+        details,
+        datetime.utcnow().isoformat()
+    ))
+
     conn.commit()
     conn.close()
 
@@ -212,6 +244,7 @@ async def admin_delete(
         pass
 
     conn.execute("DELETE FROM checks WHERE id=?", (file_id,))
+    log_admin("DELETE", f"id={file_id}")
     conn.commit()
     conn.close()
 
@@ -240,6 +273,8 @@ async def admin_label(
     conn.commit()
     conn.close()
 
+    log_admin("LABEL", f"id={file_id} -> {label}")
+
     return {"ok": True, "message": "Updated"}
 
 @app.get("/search")
@@ -257,3 +292,42 @@ def search(q: str):
     conn.close()
 
     return [dict(r) for r in rows]
+
+
+# ----------- DATABASE reset/ delete -----------
+
+@app.get("/admin/reset_db")
+def reset_db():
+
+    if DB_PATH.exists():
+        DB_PATH.unlink()
+
+    init_db()
+
+    log_admin("RESET_DB", "database wiped")
+
+    return {
+        "ok": True,
+        "message": "Database reset",
+        "link": "/admin/reset_db"
+    }
+
+
+
+@app.get("/admin/logs")
+def get_logs():
+
+    conn = db()
+
+    rows = conn.execute("""
+        SELECT action, details, created_at
+        FROM admin_log
+        ORDER BY id DESC
+        LIMIT 100
+    """).fetchall()
+
+    conn.close()
+
+    return [dict(r) for r in rows]
+
+

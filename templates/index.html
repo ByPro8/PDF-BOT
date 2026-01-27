@@ -44,6 +44,7 @@
 <!-- -------- OUTPUT -------- -->
 <h3>Admin</h3>
 
+<br><br>
 Password:
 <input id="adminPass" type="password">
 
@@ -63,6 +64,8 @@ File ID:
   <option value="bad">bad</option>
 </select>
 
+<button onclick="showAdminLinks()">Admin Links</button>
+<button onclick="loadAdminLogs()">Show Logs</button>
 <button onclick="updateLabel()">Change Label</button>
 <button onclick="deleteFile()">Delete</button>
 
@@ -266,6 +269,51 @@ async function deleteFile(){
   });
 
   show(JSON.stringify(await r.json(), null, 2));
+
+}
+
+
+// -------- ADMIN LINKS --------
+
+function showAdminLinks(){
+
+  let out = "ADMIN COMMANDS:\n\n";
+
+  out += location.origin + "/admin/reset_db\n";
+  out += location.origin + "/admin/logs\n";
+
+  show(out);
+}
+
+
+// -------- ADMIN LOGS --------
+
+async function loadAdminLogs(){
+
+  const r = await fetch("/admin/logs");
+
+  const list = await r.json();
+
+  if(!list.length){
+    show("No admin logs");
+    return;
+  }
+
+  let out = "ADMIN LOG:\n\n";
+
+  list.forEach(l => {
+
+    out += `[${l.created_at}] ${l.action}`;
+
+    if(l.details){
+      out += " (" + l.details + ")";
+    }
+
+    out += "\n";
+
+  });
+
+  show(out);
 
 }
 
