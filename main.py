@@ -4,36 +4,47 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import FastAPI, UploadFile, File, Form
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
 from pdf_logic import fingerprint
 
+
+# ---------------- CONFIG ----------------
+
 BASE = Path(__file__).parent
 
-# IMPORTANT: Render disk mount is an ABSOLUTE path (example: /var/data)
 DATA_DIR = Path(os.getenv("DATA_DIR", str(BASE / "data")))
 UPLOADS = DATA_DIR / "uploads"
 DB_PATH = DATA_DIR / "checks.db"
+
 UPLOADS.mkdir(parents=True, exist_ok=True)
+
+
+# ---------------- APP ----------------
 
 app = FastAPI()
 templates = Jinja2Templates(directory=str(BASE / "templates"))
+
+
+# ---------------- DATABASE ----------------
 
 def db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
+
 def init_db():
     conn = db()
     conn.execute("""
         CREATE TABLE IF NOT EXISTS checks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            label TEXT NOT NULL,              -- good/bad
+            label TEXT NOT NULL,
             template_hash TEXT NOT NULL,
             filename TEXT,
+            stored_path TEXT,
             created_at TEXT NOT NULL
         )
     """)
@@ -41,11 +52,11 @@ def init_db():
     conn.commit()
     conn.close()
 
+
 init_db()
 
-@app.get("/", response_class=HTMLResponse)
-def home(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+
+# ---------------- HELPERS ----------------
 
 def save_upload(file: UploadFile) -> Path:
     name = Path(file.filename or "upload.pdf").name
@@ -54,43 +65,107 @@ def save_upload(file: UploadFile) -> Path:
     out.write_bytes(file.file.read())
     return out
 
+
 def get_matches(template_hash: str):
     conn = db()
     rows = conn.execute(
-        "SELECT label, filename FROM checks WHERE template_hash=?",
+        "SELECT label FROM checks WHERE template_hash=?",
         (template_hash,),
     ).fetchall()
     conn.close()
-    return [dict(r) for r in rows]
+    return [r["label"] for r in rows]
 
-def add_record(label: str, template_hash: str, filename: str):
+
+def add_record(label, template_hash, filename, path):
     conn = db()
-    conn.execute(
-        "INSERT INTO checks(label, template_hash, filename, created_at) VALUES(?,?,?,?)",
-        (label, template_hash, filename, datetime.utcnow().isoformat()),
-    )
+    conn.execute("""
+        INSERT INTO checks(label, template_hash, filename, stored_path, created_at)
+        VALUES(?,?,?,?,?)
+    """, (
+        label,
+        template_hash,
+        filename,
+        path,
+        datetime.utcnow().isoformat()
+    ))
     conn.commit()
     conn.close()
+
+
+# ---------------- ROUTES ----------------
+
+@app.get("/", response_class=HTMLResponse)
+def home(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
+
 
 @app.post("/check")
 async def check_pdf(file: UploadFile = File(...)):
     path = save_upload(file)
-    fp = fingerprint(path)
-    matches = get_matches(fp["template_hash"])
 
-    if any(m["label"] == "bad" for m in matches):
-        return {"message": "WE FOUND A MATCH: FAKE (matches BAD database)"}
-    if any(m["label"] == "good" for m in matches):
-        return {"message": "WE FOUND A MATCH: GOOD (known good template)"}
-    return {"message": "NO MATCH FOUND (unknown template)"}
+    fp = fingerprint(path)
+    labels = get_matches(fp["template_hash"])
+
+    if "bad" in labels:
+        return {"message": "WE FOUND A MATCH: FAKE ❌"}
+
+    if "good" in labels:
+        return {"message": "WE FOUND A MATCH: GOOD ✅"}
+
+    return {"message": "NO MATCH FOUND ⚠️"}
+
 
 @app.post("/add")
 async def add_pdf(label: str = Form(...), file: UploadFile = File(...)):
-    label = (label or "").strip().lower()
-    if label not in {"good", "bad"}:
+
+    label = label.lower().strip()
+
+    if label not in ["good", "bad"]:
         return {"message": "ERROR: label must be good or bad"}
 
     path = save_upload(file)
+
     fp = fingerprint(path)
-    add_record(label, fp["template_hash"], file.filename or "")
-    return {"message": f"ADDED TO DATABASE: {label.upper()}"}
+
+    add_record(
+        label,
+        fp["template_hash"],
+        file.filename or "",
+        str(path)
+    )
+
+    return {"message": f"ADDED AS {label.upper()} ✅"}
+
+
+# ----------- DATABASE VIEW -----------
+
+@app.get("/files")
+def list_files():
+
+    conn = db()
+    rows = conn.execute("""
+        SELECT id, label, filename, created_at
+        FROM checks
+        ORDER BY id DESC
+    """).fetchall()
+    conn.close()
+
+    return [dict(r) for r in rows]
+
+
+@app.get("/open/{file_id}")
+def open_file(file_id: int):
+
+    conn = db()
+    row = conn.execute("""
+        SELECT stored_path FROM checks WHERE id=?
+    """, (file_id,)).fetchone()
+    conn.close()
+
+    if not row:
+        return {"error": "File not found"}
+
+    return FileResponse(
+        row["stored_path"],
+        media_type="application/pdf"
+    )
