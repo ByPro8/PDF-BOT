@@ -1,5 +1,7 @@
 import os
 import sqlite3
+import zipfile
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -331,3 +333,42 @@ def get_logs():
     return [dict(r) for r in rows]
 
 
+
+@app.get("/admin/export")
+def export_database():
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
+    zip_path = tmp.name
+    tmp.close()
+
+    conn = db()
+
+    rows = conn.execute("""
+        SELECT label, filename, stored_path
+        FROM checks
+    """).fetchall()
+
+    conn.close()
+
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
+
+        for r in rows:
+
+            label = r["label"] or "unknown"
+            src = r["stored_path"]
+
+            if not src or not os.path.exists(src):
+                continue
+
+            name = r["filename"] or os.path.basename(src)
+
+            # put into good/ or bad/
+            dest = f"{label}/{name}"
+
+            z.write(src, dest)
+
+    return FileResponse(
+        zip_path,
+        media_type="application/zip",
+        filename="pdf_database_backup.zip"
+    )

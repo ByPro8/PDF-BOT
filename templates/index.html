@@ -68,7 +68,7 @@ File ID:
 <button onclick="loadAdminLogs()">Show Logs</button>
 <button onclick="updateLabel()">Change Label</button>
 <button onclick="deleteFile()">Delete</button>
-
+<button onclick="downloadDB()">Download Database</button>
 <hr>
 
 <div style="margin-top:12px">
@@ -331,6 +331,15 @@ async function loadAdminLogs(){
 
 }
 
+// -------- DOWNLOAD DATABASE --------
+
+function downloadDB(){
+
+  const url = location.origin + "/admin/export";
+
+  window.open(url, "_blank");
+
+}
 
 
 </script>
