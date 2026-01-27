@@ -376,3 +376,7 @@ def export_database():
         media_type="application/zip",
         filename="pdf_database_backup.zip"
     )
+
+@app.get("/healthz")
+def health_check():
+    return {"status": "ok"}
