@@ -203,24 +203,25 @@ async function loadDB(){
   const list = await r.json();
 
   if(!list.length){
-    show("Database is empty");
+    outEl.innerHTML = "Database is empty";
     return;
   }
 
-  let out = "DATABASE FILES:\n\n";
+  let html = "<b>DATABASE FILES</b><br><br>";
 
   list.forEach(f => {
 
     const link = location.origin + "/open/" + f.id;
 
-    out += `#${f.id} | ${f.label.toUpperCase()} | ${f.filename}\n`;
-    out += `[ Open PDF ] -> ${link}\n\n`;
+    html += `#${f.id} | ${f.label.toUpperCase()} | ${f.filename}<br>`;
+    html += `<a href="${link}" target="_blank" class="open-btn">Open PDF</a><br><br>`;
 
   });
 
-  show(out);
+  outEl.innerHTML = html;
 
 }
+
 
 // -------- SEARCH --------
 
