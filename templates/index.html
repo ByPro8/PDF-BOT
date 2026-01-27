@@ -1,51 +1,156 @@
 <!doctype html>
 <html>
-<head><meta charset="utf-8"><title>PDF Check</title></head>
+<head>
+  <meta charset="utf-8">
+  <title>PDF Check</title>
+</head>
+
 <body style="font-family:Arial;margin:24px">
+
 <h2>PDF Template Checker</h2>
 
+<!-- -------- CHECK -------- -->
+
 <h3>1) Check PDF</h3>
+
 <input id="checkFile" type="file" accept="application/pdf">
 <button onclick="checkPdf()">Check</button>
 
+
+<!-- -------- ADD -------- -->
+
 <h3 style="margin-top:24px">2) Add to DB</h3>
+
 <select id="label">
   <option value="good">good</option>
   <option value="bad">bad</option>
 </select>
+
 <input id="addFile" type="file" accept="application/pdf">
 <button onclick="addPdf()">Add</button>
 
+
+<!-- -------- CONTROLS -------- -->
+
 <div style="margin-top:24px">
+
   <button onclick="clearLog()">Clear log</button>
+
+  <button onclick="loadDB()">Show Database</button>
+
 </div>
 
-<pre id="out" style="white-space:pre-wrap;background:#f6f6f6;padding:12px;border-radius:8px;margin-top:12px"></pre>
+
+<!-- -------- OUTPUT -------- -->
+
+<pre id="out"
+style="
+white-space:pre-wrap;
+background:#f6f6f6;
+padding:12px;
+border-radius:8px;
+margin-top:12px;
+">
+</pre>
+
+
+<!-- -------- SCRIPT -------- -->
 
 <script>
-const outEl = document.getElementById("out");
-const show = (text)=> outEl.textContent = text;
 
-function clearLog(){ outEl.textContent = ""; }
+const outEl = document.getElementById("out");
+
+const show = (text) => {
+  outEl.textContent = text;
+};
+
+
+function clearLog(){
+  outEl.textContent = "";
+}
+
+
+// ---------------- CHECK ----------------
 
 async function checkPdf(){
-  const f=document.getElementById("checkFile").files[0];
-  if(!f) return show("Pick a PDF first");
-  const fd=new FormData(); fd.append("file",f);
-  const r=await fetch("/check",{method:"POST",body:fd});
-  const j=await r.json();
+
+  const f = document.getElementById("checkFile").files[0];
+
+  if(!f){
+    show("Pick a PDF first");
+    return;
+  }
+
+  const fd = new FormData();
+  fd.append("file", f);
+
+  const r = await fetch("/check", {
+    method: "POST",
+    body: fd
+  });
+
+  const j = await r.json();
+
   show(j.message || "Error");
+
 }
 
+
+// ---------------- ADD ----------------
+
 async function addPdf(){
-  const f=document.getElementById("addFile").files[0];
-  const label=document.getElementById("label").value;
-  if(!f) return show("Pick a PDF first");
-  const fd=new FormData(); fd.append("label",label); fd.append("file",f);
-  const r=await fetch("/add",{method:"POST",body:fd});
-  const j=await r.json();
+
+  const f = document.getElementById("addFile").files[0];
+  const label = document.getElementById("label").value;
+
+  if(!f){
+    show("Pick a PDF first");
+    return;
+  }
+
+  const fd = new FormData();
+  fd.append("label", label);
+  fd.append("file", f);
+
+  const r = await fetch("/add", {
+    method: "POST",
+    body: fd
+  });
+
+  const j = await r.json();
+
   show(j.message || "Error");
+
 }
+
+
+// ---------------- DATABASE ----------------
+
+async function loadDB(){
+
+  const r = await fetch("/files");
+
+  const list = await r.json();
+
+  if(!list.length){
+    show("Database is empty");
+    return;
+  }
+
+  let out = "DATABASE FILES:\n\n";
+
+  list.forEach(f => {
+
+    out += `#${f.id} | ${f.label.toUpperCase()} | ${f.filename}\n`;
+    out += `Open: ${location.origin}/open/${f.id}\n\n`;
+
+  });
+
+  show(out);
+
+}
+
 </script>
+
 </body>
 </html>
