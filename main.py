@@ -68,12 +68,15 @@ def save_upload(file: UploadFile) -> Path:
 
 def get_matches(template_hash: str):
     conn = db()
-    rows = conn.execute(
-        "SELECT label FROM checks WHERE template_hash=?",
-        (template_hash,),
-    ).fetchall()
+    rows = conn.execute("""
+        SELECT id, filename
+        FROM checks
+        WHERE template_hash=?
+    """, (template_hash,)).fetchall()
+
     conn.close()
-    return [r["label"] for r in rows]
+
+    return [dict(r) for r in rows]
 
 
 def add_record(label, template_hash, filename, path):
@@ -104,12 +107,23 @@ async def check_pdf(file: UploadFile = File(...)):
     path = save_upload(file)
 
     fp = fingerprint(path)
-    labels = get_matches(fp["template_hash"])
+    matches = get_matches(fp["template_hash"])
 
-    if labels:
-        return {"message": "WE FOUND A MATCH: FAKE ❌"}
+    if matches:
+
+        m = matches[0]   # first match
+
+        return {
+        "message": "WE FOUND A MATCH: FAKE ❌",
+        "matched_with": {
+            "id": m["id"],
+            "filename": m["filename"],
+            "url": f"/open/{m['id']}"
+        }
+    }
 
     return {"message": "NO MATCH FOUND ⚠️"}
+
 
 
 @app.post("/add")
