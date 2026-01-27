@@ -106,11 +106,8 @@ async def check_pdf(file: UploadFile = File(...)):
     fp = fingerprint(path)
     labels = get_matches(fp["template_hash"])
 
-    if "bad" in labels:
+    if labels:
         return {"message": "WE FOUND A MATCH: FAKE ❌"}
-
-    if "good" in labels:
-        return {"message": "WE FOUND A MATCH: GOOD ✅"}
 
     return {"message": "NO MATCH FOUND ⚠️"}
 
