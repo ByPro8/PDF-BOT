@@ -11,6 +11,8 @@ from starlette.requests import Request
 from pdf_logic import fingerprint
 
 
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "1234")
+
 # ---------------- CONFIG ----------------
 
 BASE = Path(__file__).parent
@@ -55,6 +57,8 @@ def init_db():
 
 init_db()
 
+def check_admin(pw: str):
+    return pw == ADMIN_PASSWORD
 
 # ---------------- HELPERS ----------------
 
@@ -180,3 +184,76 @@ def open_file(file_id: int):
         row["stored_path"],
         media_type="application/pdf"
     )
+
+@app.post("/admin/delete")
+async def admin_delete(
+    file_id: int = Form(...),
+    password: str = Form(...)
+):
+
+    if not check_admin(password):
+        return {"error": "Wrong password"}
+
+    conn = db()
+
+    row = conn.execute(
+        "SELECT stored_path FROM checks WHERE id=?",
+        (file_id,)
+    ).fetchone()
+
+    if not row:
+        conn.close()
+        return {"error": "Not found"}
+
+    # delete file
+    try:
+        os.remove(row["stored_path"])
+    except:
+        pass
+
+    conn.execute("DELETE FROM checks WHERE id=?", (file_id,))
+    conn.commit()
+    conn.close()
+
+    return {"ok": True, "message": "Deleted"}
+
+
+@app.post("/admin/label")
+async def admin_label(
+    file_id: int = Form(...),
+    label: str = Form(...),
+    password: str = Form(...)
+):
+
+    if not check_admin(password):
+        return {"error": "Wrong password"}
+
+    if label not in ["good", "bad"]:
+        return {"error": "Invalid label"}
+
+    conn = db()
+
+    conn.execute("""
+        UPDATE checks SET label=? WHERE id=?
+    """, (label, file_id))
+
+    conn.commit()
+    conn.close()
+
+    return {"ok": True, "message": "Updated"}
+
+@app.get("/search")
+def search(q: str):
+
+    conn = db()
+
+    rows = conn.execute("""
+        SELECT id, label, filename, created_at
+        FROM checks
+        WHERE filename LIKE ?
+        ORDER BY id DESC
+    """, (f"%{q}%",)).fetchall()
+
+    conn.close()
+
+    return [dict(r) for r in rows]
