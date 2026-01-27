@@ -189,19 +189,21 @@ async function addPdf(){
   // ---- HANDLE DUPLICATE ----
   if(j.error === "DUPLICATE" && j.existing){
 
-    const link = location.origin + j.existing.url;
+   const link = location.origin + j.existing.url;
 
-    text += "\n\nAlready exists:\n";
-    text += `#${j.existing.id} | ${j.existing.label.toUpperCase()} | ${j.existing.filename}\n`;
-    text += link;
+    // Use HTML instead of plain text
+    let html = "";
+
+    html += "❌ DUPLICATE NAME: " + j.existing.filename + "<br><br>";
+    html += "Already exists:<br>";
+    html += `#${j.existing.id} | ${j.existing.label.toUpperCase()} | ${j.existing.filename}<br>`;
+    html += `<a href="${link}" target="_blank" class="open-btn">Open PDF</a>`;
+
+    outEl.innerHTML = html;
+    return;
   }
 
-  show(text);
 
-  // ---- RESET FIELDS ----
-  fileInput.value = "";
-  labelSelect.value = "real";
-  if(passInput) passInput.value = "";
 }
 
 
