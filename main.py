@@ -132,20 +132,27 @@ async def admin_label(
     file_id: int = Form(...), label: str = Form(...), password: str = Form(...)
 ):
 
-    if not admin.check_admin(password):
+    if not check_admin(password):
         return {"error": "Wrong password"}
 
     if label not in ["real", "fake"]:
         return {"error": "Invalid label"}
 
-    conn = db.db()
+    conn = db()  # ✅ FIX HERE
 
-    conn.execute("UPDATE checks SET label=? WHERE id=?", (label, file_id))
+    cur = conn.execute(
+        "UPDATE checks SET label=? WHERE id=?",
+        (label, file_id),
+    )
 
     conn.commit()
     conn.close()
 
-    admin.log("LABEL", f"id={file_id} -> {label}")
+    # ✅ Make sure something actually changed
+    if cur.rowcount == 0:
+        return {"error": "Nothing updated", "details": f"id {file_id} not found"}
+
+    log_admin("LABEL", f"id={file_id} -> {label}")
 
     return {"message": "Updated"}
 
@@ -171,11 +178,13 @@ def logs():
 
     conn = db.db()
 
-    rows = conn.execute("""
+    rows = conn.execute(
+        """
         SELECT action, details, created_at
         FROM admin_log
         ORDER BY id DESC
-    """).fetchall()
+    """
+    ).fetchall()
 
     conn.close()
 
