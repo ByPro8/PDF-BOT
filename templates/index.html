@@ -278,9 +278,22 @@ async function searchDB(){
 
 async function updateLabel(){
 
-  const id = document.getElementById("fileId").value;
+  const idInput = document.getElementById("fileId");
+  const passInput = document.getElementById("adminPass");
   const label = document.getElementById("newLabel").value;
-  const pw = document.getElementById("adminPass").value;
+
+  const id = idInput.value.trim();
+  const pw = passInput.value.trim();
+
+  if(!id || isNaN(id)){
+    show("❌ Enter valid file ID");
+    return;
+  }
+
+  if(!pw){
+    show("❌ Enter admin password");
+    return;
+  }
 
   const fd = new FormData();
 
@@ -288,13 +301,24 @@ async function updateLabel(){
   fd.append("label", label);
   fd.append("password", pw);
 
-  const r = await fetch("/admin/label", {
-    method: "POST",
-    body: fd
-  });
+  try{
 
-  show(JSON.stringify(await r.json(), null, 2));
+    const r = await fetch("/admin/label", {
+      method: "POST",
+      body: fd
+    });
 
+    const j = await r.json();
+
+    show(j.message || JSON.stringify(j));
+
+  }catch{
+
+    show("❌ Server error");
+
+  }
+
+  passInput.value = "";
 }
 
 
@@ -302,22 +326,49 @@ async function updateLabel(){
 
 async function deleteFile(){
 
-  const id = document.getElementById("fileId").value;
-  const pw = document.getElementById("adminPass").value;
+  const idInput = document.getElementById("fileId");
+  const passInput = document.getElementById("adminPass");
+
+  const id = idInput.value.trim();
+  const pw = passInput.value.trim();
+
+  // ---- VALIDATION ----
+  if(!id || isNaN(id)){
+    show("❌ Enter a valid file ID number");
+    return;
+  }
+
+  if(!pw){
+    show("❌ Enter admin password");
+    return;
+  }
 
   const fd = new FormData();
 
   fd.append("file_id", id);
   fd.append("password", pw);
 
-  const r = await fetch("/admin/delete", {
-    method: "POST",
-    body: fd
-  });
+  try{
 
-  show(JSON.stringify(await r.json(), null, 2));
+    const r = await fetch("/admin/delete", {
+      method: "POST",
+      body: fd
+    });
 
+    const j = await r.json();
+
+    show(j.message || JSON.stringify(j));
+
+  }catch(err){
+
+    show("❌ Server error. Check logs.");
+
+  }
+
+  // ---- RESET PASSWORD ----
+  passInput.value = "";
 }
+
 
 
 // -------- ADMIN LINKS --------
