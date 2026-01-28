@@ -189,9 +189,8 @@ async function addPdf(){
   // ---- HANDLE DUPLICATE ----
   if(j.error === "DUPLICATE" && j.existing){
 
-   const link = location.origin + j.existing.url;
+    const link = location.origin + j.existing.url;
 
-    // Use HTML instead of plain text
     let html = "";
 
     html += "❌ DUPLICATE NAME: " + j.existing.filename + "<br><br>";
@@ -200,8 +199,15 @@ async function addPdf(){
     html += `<a href="${link}" target="_blank" class="open-btn">Open PDF</a>`;
 
     outEl.innerHTML = html;
+
+    // ---- RESET INPUTS ----
+    fileInput.value = "";
+    labelSelect.value = "real";
+    if(passInput) passInput.value = "";
+
     return;
   }
+
 
 
 }
