@@ -120,7 +120,6 @@ margin-top:12px;
 
     // ---------------- CHECK ----------------
 
-    // ---------------- CHECK ----------------
 
     async function checkPdf() {
 
@@ -131,7 +130,7 @@ margin-top:12px;
         return;
       }
 
-      // ✅ Show processing
+      // Show processing
       show("⏳ Checking PDF... Please wait");
 
       const fd = new FormData();
@@ -146,18 +145,29 @@ margin-top:12px;
 
         const j = await r.json();
 
-        let text = j.message || "Error";
 
+        // ---- MATCH FOUND ----
         if (j.matched_with) {
 
           const link = location.origin + j.matched_with.url;
 
-          text += "\n\nMatched with:\n";
-          text += j.matched_with.filename + "\n";
-          text += link;
+          let html = "";
+
+          html += j.message + "<br><br>";
+
+          html += "Matched with:<br>";
+          html += `#${j.matched_with.id} | ${j.matched_with.filename}<br>`;
+          html += `<a href="${link}" target="_blank" class="open-btn">Open PDF</a>`;
+
+          outEl.innerHTML = html;
+
+          return;
         }
 
-        show(text);
+
+        // ---- NO MATCH ----
+        show(j.message || "Error");
+
 
       } catch {
 
@@ -165,6 +175,7 @@ margin-top:12px;
 
       }
     }
+
 
 
 
