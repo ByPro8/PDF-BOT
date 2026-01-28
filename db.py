@@ -172,6 +172,21 @@ def delete_record(file_id):
     conn.close()
 
 
+def update_label(file_id: int, label: str) -> bool:
+
+    conn = db()
+
+    cur = conn.execute(
+        "UPDATE checks SET label=? WHERE id=?",
+        (label, file_id),
+    )
+
+    conn.commit()
+    conn.close()
+
+    return cur.rowcount > 0
+
+
 def reset_db():
 
     if DB_PATH.exists():
