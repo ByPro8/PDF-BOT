@@ -136,12 +136,12 @@ async def admin_label(
     file_id: str = Form(...), label: str = Form(...), password: str = Form(...)
 ):
 
-    admin.log("LABEL_START", f"id={file_id}")
+    log_admin("LABEL_START", f"id={file_id}")
 
     if not file_id.isdigit():
         return {"error": "Invalid ID"}
 
-    if not admin.check_admin(password):
+    if not check_admin(password):
         return {"error": "Wrong password"}
 
     if label not in ["real", "fake"]:
@@ -149,7 +149,7 @@ async def admin_label(
 
     file_id = int(file_id)
 
-    conn = db.db()
+    conn = db()  # ✅ THIS IS THE FIX
 
     cur = conn.execute(
         "UPDATE checks SET label=? WHERE id=?",
@@ -161,11 +161,11 @@ async def admin_label(
 
     if cur.rowcount == 0:
 
-        admin.log("LABEL_FAIL", f"id={file_id}")
+        log_admin("LABEL_FAIL", f"id={file_id}")
 
         return {"error": "File not found"}
 
-    admin.log("LABEL_OK", f"id={file_id} -> {label}")
+    log_admin("LABEL_OK", f"id={file_id} -> {label}")
 
     return {"message": "Updated"}
 
