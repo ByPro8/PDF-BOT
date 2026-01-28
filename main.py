@@ -52,9 +52,14 @@ async def check_pdf(file: UploadFile = File(...)):
 @app.post("/add")
 async def add_pdf(label: str = Form(...), file: UploadFile = File(...)):
 
+    admin.log("ADD_START", file.filename or "")
+
     label = label.lower().strip()
 
     if label not in ["real", "fake"]:
+
+        admin.log("ADD_FAIL", "invalid label")
+
         return {"message": "ERROR: label must be real or fake"}
 
     filename = (file.filename or "").strip()
@@ -63,10 +68,7 @@ async def add_pdf(label: str = Form(...), file: UploadFile = File(...)):
 
     if existing:
 
-        admin.log(
-            "DUPLICATE_ADD",
-            f"{filename} (id={existing['id']}, label={existing['label']})",
-        )
+        admin.log("DUPLICATE_ADD", f"{filename} (id={existing['id']})")
 
         return {
             "error": "DUPLICATE",
@@ -85,6 +87,8 @@ async def add_pdf(label: str = Form(...), file: UploadFile = File(...)):
 
     db.add_record(label, fp["template_hash"], filename, str(path))
 
+    admin.log("ADD_OK", f"{filename} ({label})")
+
     return {"message": f"ADDED AS {label.upper()} ✅"}
 
 
@@ -94,51 +98,58 @@ def list_files():
     return db.list_files()
 
 
-@app.get("/open/{file_id}")
-def open_file(file_id: int):
-
-    path = db.get_file_path(file_id)
-
-    if not path:
-        return {"error": "Not found"}
-
-    return storage.open_file(path)
-
-
 @app.post("/admin/delete")
 async def admin_delete(file_id: str = Form(...), password: str = Form(...)):
 
-    if not admin.check_admin(password):
-        return {"error": "Wrong password"}
+    admin.log("DELETE_START", f"id={file_id}")
+
+    if not password:
+        return {"error": "Password missing"}
 
     if not file_id.isdigit():
         return {"error": "Invalid ID"}
+
+    if not admin.check_admin(password):
+        return {"error": "Wrong password"}
 
     file_id = int(file_id)
 
     path = db.get_file_path(file_id)
 
+    if not path:
+
+        admin.log("DELETE_FAIL", f"id={file_id} not found")
+
+        return {"error": "File not found"}
+
     storage.delete_file(path)
 
     db.delete_record(file_id)
 
-    admin.log("DELETE", f"id={file_id}")
+    admin.log("DELETE_OK", f"id={file_id}")
 
     return {"message": "Deleted"}
 
 
 @app.post("/admin/label")
 async def admin_label(
-    file_id: int = Form(...), label: str = Form(...), password: str = Form(...)
+    file_id: str = Form(...), label: str = Form(...), password: str = Form(...)
 ):
 
-    if not check_admin(password):
+    admin.log("LABEL_START", f"id={file_id}")
+
+    if not file_id.isdigit():
+        return {"error": "Invalid ID"}
+
+    if not admin.check_admin(password):
         return {"error": "Wrong password"}
 
     if label not in ["real", "fake"]:
         return {"error": "Invalid label"}
 
-    conn = db()  # ✅ FIX HERE
+    file_id = int(file_id)
+
+    conn = db.db()
 
     cur = conn.execute(
         "UPDATE checks SET label=? WHERE id=?",
@@ -148,11 +159,13 @@ async def admin_label(
     conn.commit()
     conn.close()
 
-    # ✅ Make sure something actually changed
     if cur.rowcount == 0:
-        return {"error": "Nothing updated", "details": f"id {file_id} not found"}
 
-    log_admin("LABEL", f"id={file_id} -> {label}")
+        admin.log("LABEL_FAIL", f"id={file_id}")
+
+        return {"error": "File not found"}
+
+    admin.log("LABEL_OK", f"id={file_id} -> {label}")
 
     return {"message": "Updated"}
 
