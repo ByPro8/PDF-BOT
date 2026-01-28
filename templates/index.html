@@ -253,27 +253,44 @@ margin-top:12px;
     // ---------------- DATABASE ----------------
     async function loadDB() {
 
-      const r = await fetch("/files");
-      const list = await r.json();
+      // Show loading instantly
+      outEl.innerHTML = "⏳ Loading database...";
 
-      if (!list.length) {
-        outEl.innerHTML = "Database is empty";
-        return;
+      try {
+
+        const r = await fetch("/files");
+
+        if (!r.ok) {
+          throw new Error("Server error");
+        }
+
+        const list = await r.json();
+
+        if (!list.length) {
+          outEl.innerHTML = "📂 Database is empty";
+          return;
+        }
+
+        let html = "<b>📂 DATABASE FILES</b><br><br>";
+
+        list.forEach(f => {
+
+          const link = location.origin + "/open/" + f.id;
+
+          html += `#${f.id} | ${f.label.toUpperCase()} | ${f.filename}<br>`;
+          html += `<a href="${link}" target="_blank" class="open-btn">Open PDF</a><br><br>`;
+
+        });
+
+        outEl.innerHTML = html;
+
+      } catch (err) {
+
+        console.error(err);
+
+        outEl.innerHTML = "❌ Failed to load database";
+
       }
-
-      let html = "<b>DATABASE FILES</b><br><br>";
-
-      list.forEach(f => {
-
-        const link = location.origin + "/open/" + f.id;
-
-        html += `#${f.id} | ${f.label.toUpperCase()} | ${f.filename}<br>`;
-        html += `<a href="${link}" target="_blank" class="open-btn">Open PDF</a><br><br>`;
-
-      });
-
-      outEl.innerHTML = html;
-
     }
 
 
