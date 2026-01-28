@@ -86,6 +86,11 @@
       display: flex;
       flex-direction: column;
       gap: 16px;
+
+      height: 100%;
+      /* allow children to size correctly */
+      min-height: 0;
+      /* allow scrolling child */
     }
 
     /* ---------- TOP BAR ---------- */
@@ -124,14 +129,24 @@
 
     .terminal {
       flex: 1;
+      /* take all remaining space */
       background: #0f172a;
       color: #00ff9c;
       padding: 16px;
       border-radius: 6px;
+
       overflow-y: auto;
+      /* vertical scroll */
+      overflow-x: hidden;
+      /* no horizontal scroll */
+
       font-family: Consolas, monospace;
       font-size: 14px;
+
       box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.6);
+
+      min-height: 0;
+      /* VERY IMPORTANT for flex layouts */
     }
 
     /* ---------- BUTTON ---------- */
