@@ -183,13 +183,11 @@ def logs():
 
     conn = db.db()
 
-    rows = conn.execute(
-        """
+    rows = conn.execute("""
         SELECT action, details, created_at
         FROM admin_log
         ORDER BY id DESC
-    """
-    ).fetchall()
+    """).fetchall()
 
     conn.close()
 

@@ -54,15 +54,9 @@ def export_zip():
     zip_path = tmp.name
     tmp.close()
 
-    rows = (
-        db.db()
-        .execute(
-            """
+    rows = db.db().execute("""
         SELECT label, filename, stored_path FROM checks
-    """
-        )
-        .fetchall()
-    )
+    """).fetchall()
 
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
 

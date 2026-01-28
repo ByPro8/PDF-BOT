@@ -21,8 +21,7 @@ def init_db():
 
     conn = db()
 
-    conn.execute(
-        """
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS checks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             label TEXT NOT NULL,
@@ -31,19 +30,16 @@ def init_db():
             stored_path TEXT,
             created_at TEXT NOT NULL
         )
-    """
-    )
+    """)
 
-    conn.execute(
-        """
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS admin_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             action TEXT NOT NULL,
             details TEXT,
             created_at TEXT NOT NULL
         )
-    """
-    )
+    """)
 
     conn.execute("CREATE INDEX IF NOT EXISTS idx_hash ON checks(template_hash)")
 
@@ -114,13 +110,11 @@ def list_files():
 
     conn = db()
 
-    rows = conn.execute(
-        """
+    rows = conn.execute("""
         SELECT id, label, filename, created_at
         FROM checks
         ORDER BY id DESC
-    """
-    ).fetchall()
+    """).fetchall()
 
     conn.close()
 
