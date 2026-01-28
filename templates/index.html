@@ -188,6 +188,16 @@
       letter-spacing: 0.5px;
       margin-bottom: 4px;
     }
+
+    .terminal {
+      display: flex;
+      flex-direction: column;
+    }
+
+    #out {
+      flex: 1;
+      overflow-y: auto;
+    }
   </style>
 </head>
 
@@ -233,15 +243,26 @@
 
 
         <!-- ===== CHECK ===== -->
+        <!-- ===== DATABASE ===== -->
         <div class="block">
 
-          <div class="title">🔍 Check</div>
+          <div class="title">📂 Database</div>
 
-          <input id="checkFile" type="file" accept="application/pdf">
+          <button onclick="loadDB()">Show Database</button>
 
-          <button onclick="checkPdf()">Check PDF</button>
+          <select id="searchType">
+            <option value="name">By Name</option>
+            <option value="id">By ID</option>
+          </select>
+
+          <input id="searchBox" placeholder="Search...">
+
+          <button onclick="searchDB()">Search in Database</button>
+
+          <button onclick="downloadDB()">Download Database</button>
 
         </div>
+
 
 
         <!-- ===== ADD ===== -->
@@ -282,10 +303,34 @@
 
       <!-- ---------- TERMINAL ---------- -->
 
-      <div id="out" class="terminal">
-        ...
-      </div>
+      <div class="terminal">
 
+        <div style="
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:8px;
+  ">
+
+          <strong>TERMINAL</strong>
+
+          <button onclick="clearLog()" style="
+        background:#374151;
+        color:white;
+        border:none;
+        padding:4px 8px;
+        border-radius:4px;
+        cursor:pointer;
+        font-size:12px;
+      ">
+            Clear
+          </button>
+
+        </div>
+
+        <div id="out" style="white-space:pre-wrap"></div>
+
+      </div>
 
     </div>
 
@@ -475,7 +520,8 @@
 
   async function searchDB() {
 
-    const q = document.getElementById("searchBox").value;
+    const q = document.getElementById("searchBox").value.trim();
+    const type = document.getElementById("searchType").value;
 
     if (!q) {
       show("❌ Enter search text");
@@ -486,7 +532,43 @@
 
     try {
 
-      const r = await fetch("/search?q=" + encodeURIComponent(q));
+      let url = "";
+
+      // Search by ID
+      if (type === "id") {
+
+        if (isNaN(q)) {
+          show("❌ ID must be a number");
+          return;
+        }
+
+        url = "/files";
+
+        const r = await fetch(url);
+        const list = await r.json();
+
+        const f = list.find(x => x.id == q);
+
+        if (!f) {
+          show("❌ No file with this ID");
+          return;
+        }
+
+        const link = location.origin + "/open/" + f.id;
+
+        outEl.innerHTML =
+          "<b>🔍 SEARCH RESULT</b><br><br>" +
+          `#${f.id} | ${f.label.toUpperCase()} | ${f.filename}<br>` +
+          `<a class="open-btn" target="_blank" href="${link}">Open PDF</a>`;
+
+        return;
+      }
+
+
+      // Search by name
+      url = "/search?q=" + encodeURIComponent(q);
+
+      const r = await fetch(url);
       const list = await r.json();
 
       if (!list.length) {
@@ -513,6 +595,7 @@
 
     }
   }
+
 
 
   // ================= LABEL =================
