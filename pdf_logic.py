@@ -4,18 +4,45 @@ from pathlib import Path
 from pypdf import PdfReader
 
 REMOVE_LINE_PREFIXES = [
-    "sayin","güvenli̇k","guvenlik","şube kodu/adi","sube kodu/adi","iban",
-    "hesap numarasi","hesap numarası","vergi̇ dai̇resi̇","vergi dairesi",
-    "vergi̇ ki̇mli̇k no","vergi kimlik no","i̇şlem tari̇hi","islem tarihi",
-    "valör","valor","alacaklı şube","alacakli sube","alacaklı hesap","alacakli hesap",
-    "alacaklı iban","alacakli iban","alacaklı adı soyadı","alacakli adi soyadi",
-    "alacaklı vergi","alacakli vergi","komi̇syon","komisyon","havale tutarı",
-    "havale tutari","hesabınızdan","hesabinizdan",
+    "sayin",
+    "güvenli̇k",
+    "guvenlik",
+    "şube kodu/adi",
+    "sube kodu/adi",
+    "iban",
+    "hesap numarasi",
+    "hesap numarası",
+    "vergi̇ dai̇resi̇",
+    "vergi dairesi",
+    "vergi̇ ki̇mli̇k no",
+    "vergi kimlik no",
+    "i̇şlem tari̇hi",
+    "islem tarihi",
+    "valör",
+    "valor",
+    "alacaklı şube",
+    "alacakli sube",
+    "alacaklı hesap",
+    "alacakli hesap",
+    "alacaklı iban",
+    "alacakli iban",
+    "alacaklı adı soyadı",
+    "alacakli adi soyadi",
+    "alacaklı vergi",
+    "alacakli vergi",
+    "komi̇syon",
+    "komisyon",
+    "havale tutarı",
+    "havale tutari",
+    "hesabınızdan",
+    "hesabinizdan",
 ]
+
 
 def extract_text(pdf_path: Path) -> str:
     reader = PdfReader(str(pdf_path))
     return "\n".join((page.extract_text() or "") for page in reader.pages)
+
 
 def normalize_for_template(text: str) -> str:
     s = text.lower().replace("\u00a0", " ")
@@ -35,8 +62,10 @@ def normalize_for_template(text: str) -> str:
             kept.append(ln)
     return "\n".join(kept)
 
+
 def sha256(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8", errors="ignore")).hexdigest()
+
 
 def anomaly_flags(raw_text: str) -> list[str]:
     t = (raw_text or "").strip()
@@ -47,6 +76,7 @@ def anomaly_flags(raw_text: str) -> list[str]:
     if weird_ratio > 0.25:
         flags.append("WEIRD_ENCODING")
     return flags
+
 
 def fingerprint(pdf_path: Path) -> dict:
     raw = extract_text(pdf_path)
