@@ -195,7 +195,6 @@ async def check_pdf(file: UploadFile = File(...)):
     }
 
 
-
 @app.post("/add")
 async def add_pdf(label: str = Form(...), file: UploadFile = File(...)):
 
@@ -212,21 +211,20 @@ async def add_pdf(label: str = Form(...), file: UploadFile = File(...)):
     if existing:
 
         log_admin(
-        "DUPLICATE_ADD",
-        f"{filename} (id={existing['id']}, label={existing['label']})"
-    )
+            "DUPLICATE_ADD",
+            f"{filename} (id={existing['id']}, label={existing['label']})"
+        )
 
-    return {
-        "error": "DUPLICATE",
-        "message": f"❌ DUPLICATE NAME: {filename}",
-        "existing": {
-            "id": existing["id"],
-            "filename": existing["filename"],
-            "label": existing["label"],
-            "url": f"/open/{existing['id']}"
+        return {
+            "error": "DUPLICATE",
+            "message": f"❌ DUPLICATE NAME: {filename}",
+            "existing": {
+                "id": existing["id"],
+                "filename": existing["filename"],
+                "label": existing["label"],
+                "url": f"/open/{existing['id']}"
+            }
         }
-    }
-
 
     # ---- SAVE NEW ----
     path = save_upload(file)
@@ -241,7 +239,6 @@ async def add_pdf(label: str = Form(...), file: UploadFile = File(...)):
     )
 
     return {"message": f"ADDED AS {label.upper()} ✅"}
-
 
 
 # ----------- DATABASE VIEW -----------
