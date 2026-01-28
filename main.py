@@ -12,8 +12,6 @@ from datetime import datetime
 from pathlib import Path
 
 
-
-
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.templating import Jinja2Templates
@@ -43,6 +41,7 @@ templates = Jinja2Templates(directory=str(BASE / "templates"))
 
 # ---------------- DATABASE ----------------
 
+
 def db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -54,7 +53,8 @@ def init_db():
     conn = db()
 
     # main table
-    conn.execute("""
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS checks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             label TEXT NOT NULL,
@@ -63,17 +63,20 @@ def init_db():
             stored_path TEXT,
             created_at TEXT NOT NULL
         )
-    """)
+    """
+    )
 
     # admin log table
-    conn.execute("""
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS admin_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             action TEXT NOT NULL,
             details TEXT,
             created_at TEXT NOT NULL
         )
-    """)
+    """
+    )
 
     conn.execute("CREATE INDEX IF NOT EXISTS idx_hash ON checks(template_hash)")
 
@@ -81,13 +84,15 @@ def init_db():
     conn.close()
 
 
-
 init_db()
+
 
 def check_admin(pw: str):
     return pw == ADMIN_PASSWORD
 
+
 # ---------------- HELPERS ----------------
+
 
 def save_upload(file: UploadFile) -> Path:
     name = Path(file.filename or "upload.pdf").name
@@ -99,11 +104,14 @@ def save_upload(file: UploadFile) -> Path:
 
 def get_matches(template_hash: str):
     conn = db()
-    rows = conn.execute("""
+    rows = conn.execute(
+        """
         SELECT id, filename
         FROM checks
         WHERE template_hash=?
-    """, (template_hash,)).fetchall()
+    """,
+        (template_hash,),
+    ).fetchall()
 
     conn.close()
 
@@ -112,34 +120,32 @@ def get_matches(template_hash: str):
 
 def add_record(label, template_hash, filename, path):
     conn = db()
-    conn.execute("""
+    conn.execute(
+        """
         INSERT INTO checks(label, template_hash, filename, stored_path, created_at)
         VALUES(?,?,?,?,?)
-    """, (
-        label,
-        template_hash,
-        filename,
-        path,
-        datetime.utcnow().isoformat()
-    ))
+    """,
+        (label, template_hash, filename, path, datetime.utcnow().isoformat()),
+    )
     conn.commit()
     conn.close()
+
 
 def log_admin(action: str, details: str = ""):
 
     conn = db()
 
-    conn.execute("""
+    conn.execute(
+        """
         INSERT INTO admin_log(action, details, created_at)
         VALUES(?,?,?)
-    """, (
-        action,
-        details,
-        datetime.utcnow().isoformat()
-    ))
+    """,
+        (action, details, datetime.utcnow().isoformat()),
+    )
 
     conn.commit()
     conn.close()
+
 
 def find_by_filename(name: str):
 
@@ -148,20 +154,23 @@ def find_by_filename(name: str):
 
     conn = db()
 
-    row = conn.execute("""
+    row = conn.execute(
+        """
         SELECT id, filename, label
         FROM checks
         WHERE lower(filename)=lower(?)
         LIMIT 1
-    """, (name.strip(),)).fetchone()
+    """,
+        (name.strip(),),
+    ).fetchone()
 
     conn.close()
 
     return dict(row) if row else None
-   
 
 
 # ---------------- ROUTES ----------------
+
 
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
@@ -186,13 +195,11 @@ async def check_pdf(file: UploadFile = File(...)):
             "matched_with": {
                 "id": m["id"],
                 "filename": m["filename"],
-                "url": f"/open/{m['id']}"
-            }
+                "url": f"/open/{m['id']}",
+            },
         }
 
-    return {
-        "message": "NO MATCH FOUND ⚠️"
-    }
+    return {"message": "NO MATCH FOUND ⚠️"}
 
 
 @app.post("/add")
@@ -212,7 +219,7 @@ async def add_pdf(label: str = Form(...), file: UploadFile = File(...)):
 
         log_admin(
             "DUPLICATE_ADD",
-            f"{filename} (id={existing['id']}, label={existing['label']})"
+            f"{filename} (id={existing['id']}, label={existing['label']})",
         )
 
         return {
@@ -222,8 +229,8 @@ async def add_pdf(label: str = Form(...), file: UploadFile = File(...)):
                 "id": existing["id"],
                 "filename": existing["filename"],
                 "label": existing["label"],
-                "url": f"/open/{existing['id']}"
-            }
+                "url": f"/open/{existing['id']}",
+            },
         }
 
     # ---- SAVE NEW ----
@@ -231,27 +238,25 @@ async def add_pdf(label: str = Form(...), file: UploadFile = File(...)):
 
     fp = fingerprint(path)
 
-    add_record(
-        label,
-        fp["template_hash"],
-        filename,
-        str(path)
-    )
+    add_record(label, fp["template_hash"], filename, str(path))
 
     return {"message": f"ADDED AS {label.upper()} ✅"}
 
 
 # ----------- DATABASE VIEW -----------
 
+
 @app.get("/files")
 def list_files():
 
     conn = db()
-    rows = conn.execute("""
+    rows = conn.execute(
+        """
         SELECT id, label, filename, created_at
         FROM checks
         ORDER BY id DESC
-    """).fetchall()
+    """
+    ).fetchall()
     conn.close()
 
     return [dict(r) for r in rows]
@@ -261,24 +266,22 @@ def list_files():
 def open_file(file_id: int):
 
     conn = db()
-    row = conn.execute("""
+    row = conn.execute(
+        """
         SELECT stored_path FROM checks WHERE id=?
-    """, (file_id,)).fetchone()
+    """,
+        (file_id,),
+    ).fetchone()
     conn.close()
 
     if not row:
         return {"error": "File not found"}
 
-    return FileResponse(
-        row["stored_path"],
-        media_type="application/pdf"
-    )
+    return FileResponse(row["stored_path"], media_type="application/pdf")
+
 
 @app.post("/admin/delete")
-async def admin_delete(
-    file_id: str = Form(...),
-    password: str = Form(...)
-):
+async def admin_delete(file_id: str = Form(...), password: str = Form(...)):
 
     try:
 
@@ -298,8 +301,7 @@ async def admin_delete(
         conn = db()
 
         row = conn.execute(
-            "SELECT stored_path FROM checks WHERE id=?",
-            (file_id,)
+            "SELECT stored_path FROM checks WHERE id=?", (file_id,)
         ).fetchone()
 
         print("ROW:", row)
@@ -331,9 +333,7 @@ async def admin_delete(
 
 @app.post("/admin/label")
 async def admin_label(
-    file_id: int = Form(...),
-    label: str = Form(...),
-    password: str = Form(...)
+    file_id: int = Form(...), label: str = Form(...), password: str = Form(...)
 ):
 
     if not check_admin(password):
@@ -344,9 +344,12 @@ async def admin_label(
 
     conn = db()
 
-    conn.execute("""
+    conn.execute(
+        """
         UPDATE checks SET label=? WHERE id=?
-    """, (label, file_id))
+    """,
+        (label, file_id),
+    )
 
     conn.commit()
     conn.close()
@@ -355,17 +358,21 @@ async def admin_label(
 
     return {"ok": True, "message": "Updated"}
 
+
 @app.get("/search")
 def search(q: str):
 
     conn = db()
 
-    rows = conn.execute("""
+    rows = conn.execute(
+        """
         SELECT id, label, filename, created_at
         FROM checks
         WHERE filename LIKE ?
         ORDER BY id DESC
-    """, (f"%{q}%",)).fetchall()
+    """,
+        (f"%{q}%",),
+    ).fetchall()
 
     conn.close()
 
@@ -373,6 +380,7 @@ def search(q: str):
 
 
 # ----------- DATABASE reset/ delete -----------
+
 
 @app.get("/admin/reset_db")
 def reset_db():
@@ -384,12 +392,7 @@ def reset_db():
 
     log_admin("RESET_DB", "database wiped")
 
-    return {
-        "ok": True,
-        "message": "Database reset",
-        "link": "/admin/reset_db"
-    }
-
+    return {"ok": True, "message": "Database reset", "link": "/admin/reset_db"}
 
 
 @app.get("/admin/logs")
@@ -397,17 +400,18 @@ def get_logs():
 
     conn = db()
 
-    rows = conn.execute("""
+    rows = conn.execute(
+        """
         SELECT action, details, created_at
         FROM admin_log
         ORDER BY id DESC
         LIMIT 100
-    """).fetchall()
+    """
+    ).fetchall()
 
     conn.close()
 
     return [dict(r) for r in rows]
-
 
 
 @app.get("/admin/export")
@@ -419,10 +423,12 @@ def export_database():
 
     conn = db()
 
-    rows = conn.execute("""
+    rows = conn.execute(
+        """
         SELECT label, filename, stored_path
         FROM checks
-    """).fetchall()
+    """
+    ).fetchall()
 
     conn.close()
 
@@ -444,10 +450,9 @@ def export_database():
             z.write(src, dest)
 
     return FileResponse(
-        zip_path,
-        media_type="application/zip",
-        filename="pdf_database_backup.zip"
+        zip_path, media_type="application/zip", filename="pdf_database_backup.zip"
     )
+
 
 @app.get("/healthz")
 def health_check():
