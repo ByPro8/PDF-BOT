@@ -2,8 +2,17 @@ import os
 import sqlite3
 import zipfile
 import tempfile
+
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+
+
 from datetime import datetime
 from pathlib import Path
+
+
+
 
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, FileResponse
@@ -270,36 +279,57 @@ def open_file(file_id: int):
 
 @app.post("/admin/delete")
 async def admin_delete(
-    file_id: int = Form(...),
+    file_id: str = Form(...),
     password: str = Form(...)
 ):
 
-    if not check_admin(password):
-        return {"error": "Wrong password"}
-
-    conn = db()
-
-    row = conn.execute(
-        "SELECT stored_path FROM checks WHERE id=?",
-        (file_id,)
-    ).fetchone()
-
-    if not row:
-        conn.close()
-        return {"error": "Not found"}
-
-    # delete file
     try:
-        os.remove(row["stored_path"])
-    except:
-        pass
 
-    conn.execute("DELETE FROM checks WHERE id=?", (file_id,))
-    log_admin("DELETE", f"id={file_id}")
-    conn.commit()
-    conn.close()
+        print("DELETE CALLED:", file_id, password)
 
-    return {"ok": True, "message": "Deleted"}
+        if not password:
+            return {"error": "Password missing"}
+
+        if not file_id or not file_id.isdigit():
+            return {"error": "Invalid file ID"}
+
+        file_id = int(file_id)
+
+        if not check_admin(password):
+            return {"error": "Wrong password"}
+
+        conn = db()
+
+        row = conn.execute(
+            "SELECT stored_path FROM checks WHERE id=?",
+            (file_id,)
+        ).fetchone()
+
+        print("ROW:", row)
+
+        if not row:
+            conn.close()
+            return {"error": "Not found"}
+
+        try:
+            if row["stored_path"]:
+                os.remove(row["stored_path"])
+        except Exception as e:
+            print("DELETE FILE ERROR:", e)
+
+        conn.execute("DELETE FROM checks WHERE id=?", (file_id,))
+        conn.commit()
+        conn.close()
+
+        log_admin("DELETE", f"id={file_id}")
+
+        return {"ok": True, "message": "Deleted"}
+
+    except Exception as e:
+
+        print("ADMIN DELETE CRASH:", e)
+
+        return {"error": "Server crash", "details": str(e)}
 
 
 @app.post("/admin/label")
