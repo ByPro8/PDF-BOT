@@ -346,53 +346,68 @@
     const labelSelect = document.getElementById("label");
     const passInput = document.getElementById("adminPass");
 
-    const f = fileInput.files[0];
+    const files = fileInput.files;   // <-- MULTIPLE FILES
     const label = labelSelect.value;
 
-    if (!f) {
-      show("❌ Pick a PDF first");
+    if (!files.length) {
+      show("❌ Pick at least one PDF");
       return;
     }
 
-    show("⏳ Uploading & saving PDF...");
+    show(`⏳ Uploading ${files.length} PDF(s)...`);
 
-    const fd = new FormData();
-    fd.append("label", label);
-    fd.append("file", f);
+    let resultText = "";
 
-    try {
+    // Upload one by one
+    for (let i = 0; i < files.length; i++) {
 
-      const r = await fetch("/add", {
-        method: "POST",
-        body: fd
-      });
+      const f = files[i];
 
-      const j = await r.json();
+      const fd = new FormData();
+      fd.append("label", label);
+      fd.append("file", f);
 
+      try {
 
-      // Duplicate
-      if (j.error === "DUPLICATE" && j.existing) {
+        const r = await fetch("/add", {
+          method: "POST",
+          body: fd
+        });
 
-        const link = location.origin + j.existing.url;
+        const j = await r.json();
 
-        outEl.innerHTML =
-          "❌ DUPLICATE NAME<br><br>" +
-          `#${j.existing.id} | ${j.existing.label.toUpperCase()} | ${j.existing.filename}<br>` +
-          `<a class="open-btn" target="_blank" href="${link}">Open PDF</a>`;
+        // ---- DUPLICATE ----
+        if (j.error === "DUPLICATE" && j.existing) {
 
-      } else {
+          resultText += `❌ ${f.name} → DUPLICATE (id=${j.existing.id})\n`;
 
-        show(j.message || "Error");
+        }
+
+        // ---- SUCCESS ----
+        else if (j.message) {
+
+          resultText += `✅ ${f.name} → ADDED\n`;
+
+        }
+
+        // ---- OTHER ERROR ----
+        else {
+
+          resultText += `⚠️ ${f.name} → ERROR\n`;
+
+        }
+
+      } catch {
+
+        resultText += `❌ ${f.name} → SERVER ERROR\n`;
 
       }
-
-    } catch {
-
-      show("❌ Server error while adding");
-
     }
 
-    // Reset
+    // Show results
+    show(resultText);
+
+    // Reset inputs
     fileInput.value = "";
     labelSelect.value = "real";
     if (passInput) passInput.value = "";
