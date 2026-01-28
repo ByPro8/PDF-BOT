@@ -1,5 +1,6 @@
 <!doctype html>
 <html>
+
 <head>
   <meta charset="utf-8">
   <title>PDF Check</title>
@@ -14,84 +15,84 @@
       font-size: 12px;
       margin: 4px 0;
     }
+
     .open-btn:hover {
       background: #0056b3;
     }
-</style>
+  </style>
 </head>
 
 <body style="font-family:Arial;margin:24px">
 
-<h2>PDF Template Checker</h2>
+  <h2>PDF Template Checker</h2>
 
-<!-- -------- CHECK -------- -->
+  <!-- -------- CHECK -------- -->
 
-<h3>1) Check PDF</h3>
+  <h3>1) Check PDF</h3>
 
-<input id="checkFile" type="file" accept="application/pdf">
-<button onclick="checkPdf()">Check</button>
-
-
-<!-- -------- ADD -------- -->
-
-<h3 style="margin-top:24px">2) Add to DB</h3>
-
-<select id="label">
-  <option value="real">real</option>
-  <option value="fake">fake</option>
-</select>
-
-<input id="addFile" type="file" accept="application/pdf">
-<button onclick="addPdf()">Add</button>
+  <input id="checkFile" type="file" accept="application/pdf">
+  <button onclick="checkPdf()">Check</button>
 
 
-<!-- -------- CONTROLS -------- -->
+  <!-- -------- ADD -------- -->
 
-<div style="margin-top:24px">
+  <h3 style="margin-top:24px">2) Add to DB</h3>
+
+  <select id="label">
+    <option value="real">real</option>
+    <option value="fake">fake</option>
+  </select>
+
+  <input id="addFile" type="file" accept="application/pdf">
+  <button onclick="addPdf()">Add</button>
+
+
+  <!-- -------- CONTROLS -------- -->
+
+  <div style="margin-top:24px">
 
 
 
-  <button onclick="loadDB()">Show Database</button>
+    <button onclick="loadDB()">Show Database</button>
 
-</div>
+  </div>
 
 
-<!-- -------- OUTPUT -------- -->
-<h3>Admin</h3>
+  <!-- -------- OUTPUT -------- -->
+  <h3>Admin</h3>
 
-<br><br>
-Password:
-<input id="adminPass" type="password">
+  <br><br>
+  Password:
+  <input id="adminPass" type="password">
 
-<br><br>
+  <br><br>
 
-Search:
-<input id="searchBox">
-<button onclick="searchDB()">Search</button>
+  Search:
+  <input id="searchBox">
+  <button onclick="searchDB()">Search</button>
 
-<br><br>
+  <br><br>
 
-File ID:
-<input id="fileId" style="width:60px">
+  File ID:
+  <input id="fileId" style="width:60px">
 
-<select id="newLabel">
-  <option value="real">real</option>
-  <option value="fake">fake</option>
-</select>
+  <select id="newLabel">
+    <option value="real">real</option>
+    <option value="fake">fake</option>
+  </select>
 
-<button onclick="showAdminLinks()">Admin Links</button>
-<button onclick="loadAdminLogs()">Show Logs</button>
-<button onclick="updateLabel()">Change Label</button>
-<button onclick="deleteFile()">Delete</button>
-<button onclick="downloadDB()">Download Database</button>
-<hr>
+  <button onclick="showAdminLinks()">Admin Links</button>
+  <button onclick="loadAdminLogs()">Show Logs</button>
+  <button onclick="updateLabel()">Change Label</button>
+  <button onclick="deleteFile()">Delete</button>
+  <button onclick="downloadDB()">Download Database</button>
+  <hr>
 
-<div style="margin-top:12px">
-  <button onclick="clearLog()">Clear log</button>
-</div>
+  <div style="margin-top:12px">
+    <button onclick="clearLog()">Clear log</button>
+  </div>
 
-<pre id="out"
-style="
+  <pre id="out" style="
 white-space:pre-wrap;
 background:#f6f6f6;
 padding:12px;
@@ -101,332 +102,356 @@ margin-top:12px;
 </pre>
 
 
-<!-- -------- SCRIPT -------- -->
+  <!-- -------- SCRIPT -------- -->
 
-<script>
+  <script>
 
-const outEl = document.getElementById("out");
+    const outEl = document.getElementById("out");
 
-const show = (text) => {
-  outEl.textContent = text;
-};
+    const show = (text) => {
+      outEl.textContent = text;
+    };
 
 
-function clearLog(){
-  outEl.textContent = "";
-}
-
-
-// ---------------- CHECK ----------------
-
-async function checkPdf(){
-
-  const f = document.getElementById("checkFile").files[0];
-
-  if(!f){
-    show("Pick a PDF first");
-    return;
-  }
-
-  const fd = new FormData();
-  fd.append("file", f);
-
-  const r = await fetch("/check", {
-    method: "POST",
-    body: fd
-  });
-
-  const j = await r.json();
-
-  let text = j.message || "Error";
-
-  if(j.matched_with){
-
-    const link =
-      location.origin + j.matched_with.url;
-
-    text += "\n\nMatched with:\n";
-    text += j.matched_with.filename + "\n";
-    text += link;
-
-  }
-
-  show(text);
-
-}
-
-
-
-// ---------------- ADD ----------------
-
-async function addPdf(){
-
-  const fileInput = document.getElementById("addFile");
-  const labelSelect = document.getElementById("label");
-  const passInput = document.getElementById("adminPass");
-
-  const f = fileInput.files[0];
-  const label = labelSelect.value;
-
-  if(!f){
-    show("Pick a PDF first");
-    return;
-  }
-
-  const fd = new FormData();
-  fd.append("label", label);
-  fd.append("file", f);
-
-  const r = await fetch("/add", {
-    method: "POST",
-    body: fd
-  });
-
-  const j = await r.json();
-
-  let text = j.message || "Error";
-
-  // ---- HANDLE DUPLICATE ----
-  if(j.error === "DUPLICATE" && j.existing){
-
-    const link = location.origin + j.existing.url;
-
-    let html = "";
-
-    html += "❌ DUPLICATE NAME: " + j.existing.filename + "<br><br>";
-    html += "Already exists:<br>";
-    html += `#${j.existing.id} | ${j.existing.label.toUpperCase()} | ${j.existing.filename}<br>`;
-    html += `<a href="${link}" target="_blank" class="open-btn">Open PDF</a>`;
-
-    outEl.innerHTML = html;
-
-    // ---- RESET INPUTS ----
-    fileInput.value = "";
-    labelSelect.value = "real";
-    if(passInput) passInput.value = "";
-
-    return;
-  }
-
-
-
-}
-
-
-
-
-// ---------------- DATABASE ----------------
-async function loadDB(){
-
-  const r = await fetch("/files");
-  const list = await r.json();
-
-  if(!list.length){
-    outEl.innerHTML = "Database is empty";
-    return;
-  }
-
-  let html = "<b>DATABASE FILES</b><br><br>";
-
-  list.forEach(f => {
-
-    const link = location.origin + "/open/" + f.id;
-
-    html += `#${f.id} | ${f.label.toUpperCase()} | ${f.filename}<br>`;
-    html += `<a href="${link}" target="_blank" class="open-btn">Open PDF</a><br><br>`;
-
-  });
-
-  outEl.innerHTML = html;
-
-}
-
-
-// -------- SEARCH --------
-
-async function searchDB(){
-
-  const q = document.getElementById("searchBox").value;
-
-  const r = await fetch("/search?q=" + encodeURIComponent(q));
-
-  const list = await r.json();
-
-  if(!list.length){
-    show("No results");
-    return;
-  }
-
-  let out = "SEARCH RESULTS:\n\n";
-
-  list.forEach(f=>{
-
-    const link =
-      location.origin + "/open/" + f.id;
-
-    out += `#${f.id} | ${f.label} | ${f.filename}\n`;
-    out += `Open: ${link}\n\n`;
-
-  });
-
-  show(out);
-
-}
-
-
-// -------- LABEL --------
-
-async function updateLabel(){
-
-  const idInput = document.getElementById("fileId");
-  const passInput = document.getElementById("adminPass");
-  const label = document.getElementById("newLabel").value;
-
-  const id = idInput.value.trim();
-  const pw = passInput.value.trim();
-
-  if(!id || isNaN(id)){
-    show("❌ Enter valid file ID");
-    return;
-  }
-
-  if(!pw){
-    show("❌ Enter admin password");
-    return;
-  }
-
-  const fd = new FormData();
-
-  fd.append("file_id", id);
-  fd.append("label", label);
-  fd.append("password", pw);
-
-  try{
-
-    const r = await fetch("/admin/label", {
-      method: "POST",
-      body: fd
-    });
-
-    const j = await r.json();
-
-    show(j.message || JSON.stringify(j));
-
-  }catch{
-
-    show("❌ Server error");
-
-  }
-
-  passInput.value = "";
-}
-
-
-// -------- DELETE --------
-
-async function deleteFile(){
-
-  const idInput = document.getElementById("fileId");
-  const passInput = document.getElementById("adminPass");
-
-  const id = idInput.value.trim();
-  const pw = passInput.value.trim();
-
-  // ---- VALIDATION ----
-  if(!id || isNaN(id)){
-    show("❌ Enter a valid file ID number");
-    return;
-  }
-
-  if(!pw){
-    show("❌ Enter admin password");
-    return;
-  }
-
-  const fd = new FormData();
-
-  fd.append("file_id", id);
-  fd.append("password", pw);
-
-  try{
-
-    const r = await fetch("/admin/delete", {
-      method: "POST",
-      body: fd
-    });
-
-    const j = await r.json();
-
-    show(j.message || JSON.stringify(j));
-
-  }catch(err){
-
-    show("❌ Server error. Check logs.");
-
-  }
-
-  // ---- RESET PASSWORD ----
-  passInput.value = "";
-}
-
-
-
-// -------- ADMIN LINKS --------
-
-function showAdminLinks(){
-
-  let out = "ADMIN COMMANDS:\n\n";
-
-  out += location.origin + "/admin/reset_db\n";
-  out += location.origin + "/admin/logs\n";
-
-  show(out);
-}
-
-
-// -------- ADMIN LOGS --------
-
-async function loadAdminLogs(){
-
-  const r = await fetch("/admin/logs");
-
-  const list = await r.json();
-
-  if(!list.length){
-    show("No admin logs");
-    return;
-  }
-
-  let out = "ADMIN LOG:\n\n";
-
-  list.forEach(l => {
-
-    out += `[${l.created_at}] ${l.action}`;
-
-    if(l.details){
-      out += " (" + l.details + ")";
+    function clearLog() {
+      outEl.textContent = "";
     }
 
-    out += "\n";
 
-  });
+    // ---------------- CHECK ----------------
 
-  show(out);
+    // ---------------- CHECK ----------------
 
-}
+    async function checkPdf() {
 
-// -------- DOWNLOAD DATABASE --------
+      const f = document.getElementById("checkFile").files[0];
 
-function downloadDB(){
+      if (!f) {
+        show("❌ Pick a PDF first");
+        return;
+      }
 
-  const url = location.origin + "/admin/export";
+      // ✅ Show processing
+      show("⏳ Checking PDF... Please wait");
 
-  window.open(url, "_blank");
+      const fd = new FormData();
+      fd.append("file", f);
 
-}
+      try {
+
+        const r = await fetch("/check", {
+          method: "POST",
+          body: fd
+        });
+
+        const j = await r.json();
+
+        let text = j.message || "Error";
+
+        if (j.matched_with) {
+
+          const link = location.origin + j.matched_with.url;
+
+          text += "\n\nMatched with:\n";
+          text += j.matched_with.filename + "\n";
+          text += link;
+        }
+
+        show(text);
+
+      } catch {
+
+        show("❌ Server error while checking");
+
+      }
+    }
 
 
-</script>
+
+
+    // ---------------- ADD ----------------
+
+    async function addPdf() {
+
+      const fileInput = document.getElementById("addFile");
+      const labelSelect = document.getElementById("label");
+      const passInput = document.getElementById("adminPass");
+
+      const f = fileInput.files[0];
+      const label = labelSelect.value;
+
+      if (!f) {
+        show("❌ Pick a PDF first");
+        return;
+      }
+
+      // ✅ Show processing
+      show("⏳ Uploading & saving PDF... Please wait");
+
+      const fd = new FormData();
+      fd.append("label", label);
+      fd.append("file", f);
+
+      try {
+
+        const r = await fetch("/add", {
+          method: "POST",
+          body: fd
+        });
+
+        const j = await r.json();
+
+
+        // ---- HANDLE DUPLICATE ----
+        if (j.error === "DUPLICATE" && j.existing) {
+
+          const link = location.origin + j.existing.url;
+
+          let html = "";
+
+          html += "❌ DUPLICATE NAME: " + j.existing.filename + "<br><br>";
+          html += "Already exists:<br>";
+          html += `#${j.existing.id} | ${j.existing.label.toUpperCase()} | ${j.existing.filename}<br>`;
+          html += `<a href="${link}" target="_blank" class="open-btn">Open PDF</a>`;
+
+          outEl.innerHTML = html;
+
+        } else {
+
+          // ✅ Normal success / error
+          show(j.message || "Error");
+
+        }
+
+      } catch {
+
+        show("❌ Server error while adding");
+
+      }
+
+      // ✅ ALWAYS reset inputs
+      fileInput.value = "";
+      labelSelect.value = "real";
+      if (passInput) passInput.value = "";
+    }
+
+
+
+
+
+    // ---------------- DATABASE ----------------
+    async function loadDB() {
+
+      const r = await fetch("/files");
+      const list = await r.json();
+
+      if (!list.length) {
+        outEl.innerHTML = "Database is empty";
+        return;
+      }
+
+      let html = "<b>DATABASE FILES</b><br><br>";
+
+      list.forEach(f => {
+
+        const link = location.origin + "/open/" + f.id;
+
+        html += `#${f.id} | ${f.label.toUpperCase()} | ${f.filename}<br>`;
+        html += `<a href="${link}" target="_blank" class="open-btn">Open PDF</a><br><br>`;
+
+      });
+
+      outEl.innerHTML = html;
+
+    }
+
+
+    // -------- SEARCH --------
+
+    async function searchDB() {
+
+      const q = document.getElementById("searchBox").value;
+
+      const r = await fetch("/search?q=" + encodeURIComponent(q));
+
+      const list = await r.json();
+
+      if (!list.length) {
+        show("No results");
+        return;
+      }
+
+      let out = "SEARCH RESULTS:\n\n";
+
+      list.forEach(f => {
+
+        const link =
+          location.origin + "/open/" + f.id;
+
+        out += `#${f.id} | ${f.label} | ${f.filename}\n`;
+        out += `Open: ${link}\n\n`;
+
+      });
+
+      show(out);
+
+    }
+
+
+    // -------- LABEL --------
+
+    async function updateLabel() {
+
+      const idInput = document.getElementById("fileId");
+      const passInput = document.getElementById("adminPass");
+      const label = document.getElementById("newLabel").value;
+
+      const id = idInput.value.trim();
+      const pw = passInput.value.trim();
+
+      if (!id || isNaN(id)) {
+        show("❌ Enter valid file ID");
+        return;
+      }
+
+      if (!pw) {
+        show("❌ Enter admin password");
+        return;
+      }
+
+      const fd = new FormData();
+
+      fd.append("file_id", id);
+      fd.append("label", label);
+      fd.append("password", pw);
+
+      try {
+
+        const r = await fetch("/admin/label", {
+          method: "POST",
+          body: fd
+        });
+
+        const j = await r.json();
+
+        show(j.message || JSON.stringify(j));
+
+      } catch {
+
+        show("❌ Server error");
+
+      }
+
+      passInput.value = "";
+    }
+
+
+    // -------- DELETE --------
+
+    async function deleteFile() {
+
+      const idInput = document.getElementById("fileId");
+      const passInput = document.getElementById("adminPass");
+
+      const id = idInput.value.trim();
+      const pw = passInput.value.trim();
+
+      // ---- VALIDATION ----
+      if (!id || isNaN(id)) {
+        show("❌ Enter a valid file ID number");
+        return;
+      }
+
+      if (!pw) {
+        show("❌ Enter admin password");
+        return;
+      }
+
+      const fd = new FormData();
+
+      fd.append("file_id", id);
+      fd.append("password", pw);
+
+      try {
+
+        const r = await fetch("/admin/delete", {
+          method: "POST",
+          body: fd
+        });
+
+        const j = await r.json();
+
+        show(j.message || JSON.stringify(j));
+
+      } catch (err) {
+
+        show("❌ Server error. Check logs.");
+
+      }
+
+      // ---- RESET PASSWORD ----
+      passInput.value = "";
+    }
+
+
+
+    // -------- ADMIN LINKS --------
+
+    function showAdminLinks() {
+
+      let out = "ADMIN COMMANDS:\n\n";
+
+      out += location.origin + "/admin/reset_db\n";
+      out += location.origin + "/admin/logs\n";
+
+      show(out);
+    }
+
+
+    // -------- ADMIN LOGS --------
+
+    async function loadAdminLogs() {
+
+      const r = await fetch("/admin/logs");
+
+      const list = await r.json();
+
+      if (!list.length) {
+        show("No admin logs");
+        return;
+      }
+
+      let out = "ADMIN LOG:\n\n";
+
+      list.forEach(l => {
+
+        out += `[${l.created_at}] ${l.action}`;
+
+        if (l.details) {
+          out += " (" + l.details + ")";
+        }
+
+        out += "\n";
+
+      });
+
+      show(out);
+
+    }
+
+    // -------- DOWNLOAD DATABASE --------
+
+    function downloadDB() {
+
+      const url = location.origin + "/admin/export";
+
+      window.open(url, "_blank");
+
+    }
+
+
+  </script>
 
 </body>
+
 </html>
