@@ -39,7 +39,13 @@ def delete_file(path):
 
 def open_file(path):
 
-    return FileResponse(path, media_type="application/pdf")
+    filename = os.path.basename(path)
+
+    return FileResponse(
+        path,
+        filename=filename,
+        media_type="application/octet-stream",
+    )
 
 
 def export_zip():
@@ -48,9 +54,15 @@ def export_zip():
     zip_path = tmp.name
     tmp.close()
 
-    rows = db.db().execute("""
+    rows = (
+        db.db()
+        .execute(
+            """
         SELECT label, filename, stored_path FROM checks
-    """).fetchall()
+    """
+        )
+        .fetchall()
+    )
 
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
 
