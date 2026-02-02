@@ -68,6 +68,29 @@ def _clean_iban(s: Optional[str]) -> Optional[str]:
     return re.sub(r"\s+", " ", s).strip()
 
 
+def _detect_tr_status(raw_text: str) -> str:
+    """
+    SAFE:
+    - completed only if receipt text explicitly proves it.
+    - otherwise unknown/pending/failed/canceled by keywords.
+    """
+    t = _norm(raw_text)
+
+    # Negative states first (generic)
+    if re.search(r"\biptal\b|\biptal edildi\b|\bcancel", t):
+        return "canceled"
+    if re.search(r"\bbasarisiz\b|\bhata\b|\breddedildi\b|\bfailed\b|\brejected\b", t):
+        return "failed"
+    if re.search(r"\bbeklemede\b|\bonay bekliyor\b|\bonayda\b|\baskida\b|\bisleniyor\b|\bpending\b|\bprocessing\b", t):
+        return "pending"
+
+    # PTT explicit completion: "... hesabınızdan ... çekilmiştir."
+    if re.search(r"\bhesabinizdan\b.*\bcekilmistir\b", t):
+        return "completed"
+
+    return "unknown"
+
+
 def parse_pttbank(pdf_path: Path) -> Dict:
     raw = _extract_text(pdf_path, max_pages=2)
     lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
@@ -78,9 +101,7 @@ def parse_pttbank(pdf_path: Path) -> Dict:
     amount = _value_inline(lines, "Tutar")
     receipt_no = _value_inline(lines, "İşlem Sıra No")
 
-    tt_raw = _value_inline(lines, "İŞLEM TARİHİ") or _value_inline(
-        lines, "İşlem Tarihi"
-    )
+    tt_raw = _value_inline(lines, "İŞLEM TARİHİ") or _value_inline(lines, "İşlem Tarihi")
     transaction_time = _parse_ptt_time(tt_raw or "")
 
     if not transaction_time:
@@ -93,6 +114,7 @@ def parse_pttbank(pdf_path: Path) -> Dict:
     sender = _value_after_exact_line(lines, "SAYIN")
 
     return {
+        "tr_status": _detect_tr_status(raw),
         "sender_name": sender,
         "receiver_name": receiver,
         "receiver_iban": receiver_iban,

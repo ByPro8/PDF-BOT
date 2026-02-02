@@ -1,120 +1,39 @@
 <!doctype html>
 <html lang="en">
-
 <head>
   <meta charset="utf-8">
   <title>Suck My PDF</title>
 
   <style>
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: #020617;
-      color: #e5e7eb;
-    }
-
-    .app {
-      display: grid;
-      grid-template-columns: 1fr;
-      height: 100vh;
-    }
-
-    .main {
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      background: #020617;
-      min-height: 0;
-    }
-
-    .topbar {
-      background: #020617;
-      border-radius: 6px;
-      padding: 8px;
-      display: flex;
-      gap: 6px;
-      align-items: stretch;
-      overflow-x: auto;
-      border: 1px solid #1e293b;
-    }
-
-    .topbar input,
-    .topbar select {
-      padding: 6px;
-      font-size: 14px;
-      background: #020617;
-      color: #e5e7eb;
-      border: 1px solid #1e293b;
-      border-radius: 4px;
-    }
-
-    .topbar button {
-      padding: 6px 12px;
-      background: #1d4ed8;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-
-    .topbar button:hover {
-      background: #2563eb;
-    }
+    body { margin:0; font-family: Arial, sans-serif; background:#020617; color:#e5e7eb; }
+    .app { display:grid; grid-template-columns:1fr; height:100vh; }
+    .main { padding:20px; display:flex; flex-direction:column; gap:16px; background:#020617; min-height:0; }
+    .topbar { background:#020617; border-radius:6px; padding:8px; display:flex; gap:6px; align-items:stretch; overflow-x:auto; border:1px solid #1e293b; }
+    .topbar input { padding:6px; font-size:14px; background:#020617; color:#e5e7eb; border:1px solid #1e293b; border-radius:4px; }
+    .topbar button { padding:6px 12px; background:#1d4ed8; color:white; border:none; border-radius:4px; cursor:pointer; }
+    .topbar button:hover { background:#2563eb; }
 
     .terminal {
-      flex: 1;
-      min-height: 0;
-      background: #0f172a;
-      color: #00ff9c;
-      padding: 12px;
-      border-radius: 6px;
-      font-family: Consolas, monospace;
-      font-size: 14px;
-      display: flex;
-      flex-direction: column;
-      box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.8);
-      border: 1px solid #1e293b;
+      flex:1; min-height:0;
+      background:#0f172a;
+      padding:12px; border-radius:6px;
+      font-family: Consolas, monospace; font-size:14px;
+      display:flex; flex-direction:column;
+      box-shadow: inset 0 0 8px rgba(0,0,0,0.8);
+      border:1px solid #1e293b;
     }
 
-    #out {
-      flex: 1;
-      overflow-y: auto;
-      white-space: pre-wrap;
-    }
-
-    .block {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      padding: 8px 12px;
-      border-right: 1px solid #1e293b;
-      min-width: 220px;
-    }
-
-    .block:last-child {
-      border-right: none;
-    }
-
-    .title {
-      font-size: 12px;
-      color: #9ca3af;
-      font-weight: bold;
-      margin-bottom: 4px;
-    }
+    #out { flex:1; overflow-y:auto; }
+    pre { margin:0; white-space:pre-wrap; color:#00ff9c; }
   </style>
-
 </head>
 
 <body>
-
   <div class="app">
     <div class="main">
-
       <div class="topbar">
         <div class="block">
           <div class="title">🔍 Check PDF</div>
-
           <input id="checkFile" type="file" accept="application/pdf">
           <button id="checkBtn" onclick="checkPdf()">Check PDF</button>
         </div>
@@ -127,10 +46,8 @@
             Clear
           </button>
         </div>
-
-        <div id="out">...</div>
+        <div id="out"><pre>...</pre></div>
       </div>
-
     </div>
   </div>
 
@@ -138,25 +55,35 @@
     const outEl = document.getElementById("out");
     const btn = document.getElementById("checkBtn");
 
-    // Use HTML output (so we can color specific parts)
-    const show = (html) => outEl.innerHTML = html;
-
-    function clearLog() {
-      show("Cleared.");
-    }
-
-    function esc(s) {
-      return String(s)
+    function escapeHtml(s) {
+      return String(s ?? "")
         .replaceAll("&", "&amp;")
         .replaceAll("<", "&lt;")
         .replaceAll(">", "&gt;");
     }
 
-    function formatDataHtml(d) {
-      if (!d) return esc("No data");
-      if (typeof d !== "object") return esc(String(d));
+    function showPre(htmlInsidePre) {
+      outEl.innerHTML = `<pre>${htmlInsidePre}</pre>`;
+    }
+
+    function clearLog() {
+      showPre("Cleared.");
+    }
+
+    function colorForStatus(status) {
+      status = String(status ?? "").toLowerCase();
+      if (status === "unknown" || !status) return "#ff4d4d";
+      if (status === "pending") return "#ffd166";
+      if (status === "failed" || status === "canceled") return "#ff4d4d";
+      if (status === "completed") return "#00ffa6";
+      return "#ff4d4d";
+    }
+
+    function formatData(data) {
+      if (!data || typeof data !== "object") return escapeHtml(JSON.stringify(data));
 
       const order = [
+        "tr_status",
         "sender_name",
         "receiver_name",
         "receiver_iban",
@@ -167,53 +94,49 @@
         "error",
       ];
 
-      const highlight = new Set([
-        "receiver_name",
-        "receiver_iban",
-        "amount",
-        "transaction_time",
-      ]);
+      const pad = 18;
 
-      const rows = [];
+      // Strong highlight colors (easy to notice)
+      const statusDisplay = (v) => {
+        const st = String(v ?? "").toLowerCase();
+        if (st === "completed") return { text: "✅", color: "#00ffa6" };
+        if (st === "unknown" || !st) {
+          return { text: "unknown — save the file and send it the creator to update the BOT", color: "#ff4d4d" };
+        }
+        return { text: "❌ not completed transaction", color: "#ff4d4d" };
+      };
 
-      // known keys (skip null/empty)
+      const valueColor = (k, v) => {
+        if (k === "tr_status") return statusDisplay(v).color;
+        if (k === "receiver_name") return "#00e5ff";
+        if (k === "receiver_iban") return "#00e5ff";
+        if (k === "amount") return "#00e5ff";
+        if (k === "transaction_time") return "#00e5ff";
+        return "#00ff9c";
+      };
+
+      let out = "";
       for (const k of order) {
-        const v = d[k];
-        if (v === undefined || v === null) continue;
-        const s = String(v).trim();
-        if (!s) continue;
-        rows.push([k, s]);
+        if (!(k in data)) continue;
+
+        const key = (k + "").padEnd(pad, " ");
+        const val = data[k];
+
+        let displayVal = val;
+        if (k === "tr_status") displayVal = statusDisplay(val).text;
+
+        const color = valueColor(k, val);
+        out += `${escapeHtml(key)}<span style="color:${color}">${escapeHtml(displayVal)}</span>
+`;
       }
-
-      // extra keys (also skip null/empty)
-      for (const k of Object.keys(d)) {
-        if (order.includes(k)) continue;
-        const v = d[k];
-        if (v === undefined || v === null) continue;
-        const s = String(v).trim();
-        if (!s) continue;
-        rows.push([k, s]);
-      }
-
-      if (!rows.length) return esc("No fields");
-
-      const maxKeyLen = rows.reduce((m, [k]) => Math.max(m, k.length), 0);
-
-      // IMPORTANT: use &nbsp; for padding so alignment stays in HTML
-      return rows.map(([k, v]) => {
-        const pad = "&nbsp;".repeat(Math.max(0, maxKeyLen - k.length));
-        const keyPart = `<span>${esc(k)}${pad}</span>`;
-        const valClass = highlight.has(k) ? "val-hi" : "val";
-        const valPart = `<span class="${valClass}">${esc(v)}</span>`;
-        return `${keyPart}&nbsp;&nbsp;${valPart}`;
-      }).join("<br>");
+      return out.trimEnd();
     }
 
     async function checkPdf() {
       const f = document.getElementById("checkFile").files[0];
-      if (!f) return show("❌ Pick PDF");
+      if (!f) return showPre("❌ Pick PDF");
 
-      show("⏳ Uploading...");
+      showPre("⏳ Uploading...");
       if (btn) btn.disabled = true;
 
       const fd = new FormData();
@@ -223,32 +146,19 @@
         const r = await fetch("/check", { method: "POST", body: fd });
         const j = await r.json();
 
-        show(
-          `✅ Uploaded: ${esc(f.name)}<br><br>` +
-          `BANK: ${esc(j.detected?.bank)} (${esc(j.detected?.variant || "no variant")})<br>` +
-          `METHOD: ${esc(j.detected?.method)}<br><br>` +
-          `DATA:<br>${formatDataHtml(j.data)}<br><br>` +
-          (j.error ? `ERROR:<br>${esc(j.error)}<br>` : "")
-        );
+        const head =
+          `✅ Uploaded: ${escapeHtml(f.name)}\n\n` +
+          `BANK: ${escapeHtml(j.detected?.bank)} (${escapeHtml(j.detected?.variant || "no variant")})\n` +
+          `METHOD: ${escapeHtml(j.detected?.method)}\n\n` +
+          `DATA:\n`;
+
+        showPre(head + formatData(j.data) + "\n");
       } catch {
-        show("❌ Server error");
+        showPre("❌ Server error");
       } finally {
         if (btn) btn.disabled = false;
       }
     }
-
-    // Inject small CSS for highlighted values
-    // (keeps your original terminal green, and makes highlights brighter)
-    (function addStyles() {
-      const style = document.createElement("style");
-      style.textContent = `
-      .val { color: #00ff9c; }
-      .val-hi { color: #39ff14; font-weight: 700; }
-    `;
-      document.head.appendChild(style);
-    })();
   </script>
-
 </body>
-
 </html>

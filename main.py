@@ -47,7 +47,13 @@ async def check_pdf(file: UploadFile = File(...)):
         except Exception as e:
             data = {"error": f"{type(e).__name__}: {e}"}
 
-        # --- Pretty terminal log (no JSON quotes) ---
+        # Ensure tr_status always exists (parsers decide; if missing -> unknown)
+        if isinstance(data, dict) and data is not None:
+            data.setdefault("tr_status", "unknown")
+        else:
+            data = {"tr_status": "unknown"}
+
+        # --- Pretty terminal log ---
         try:
             log.info("---- UPLOAD ----")
             log.info("file: %s", file.filename)
@@ -61,6 +67,7 @@ async def check_pdf(file: UploadFile = File(...)):
             log.info("---- DATA ----")
             if isinstance(data, dict) and data is not None:
                 for k in [
+                    "tr_status",
                     "sender_name",
                     "receiver_name",
                     "receiver_iban",
@@ -72,8 +79,6 @@ async def check_pdf(file: UploadFile = File(...)):
                 ]:
                     if k in data:
                         log.info("%s: %s", k, data.get(k))
-            else:
-                log.info("data: %s", data)
         except Exception:
             pass
 
