@@ -17,64 +17,8 @@
 
     .app {
       display: grid;
-      grid-template-columns: 260px 1fr;
+      grid-template-columns: 1fr;
       height: 100vh;
-    }
-
-    /* ---------- SIDEBAR ---------- */
-
-    .sidebar {
-      background: #020617;
-      color: #e5e7eb;
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      border-right: 1px solid #1e293b;
-    }
-
-    .sidebar input,
-    .sidebar select,
-    .sidebar button {
-      width: 100%;
-      padding: 6px;
-      font-size: 14px;
-    }
-
-    .sidebar input,
-    .sidebar select {
-      background: #020617;
-      color: #e5e7eb;
-      border-radius: 4px;
-      border: 1px solid #1e293b;
-    }
-
-    .sidebar button {
-      background: #1d4ed8;
-      border: none;
-      border-radius: 4px;
-      color: white;
-      cursor: pointer;
-    }
-
-    .sidebar button:hover {
-      background: #2563eb;
-    }
-
-    .sidebar button.red {
-      background: #b91c1c;
-    }
-
-    .sidebar button.red:hover {
-      background: #dc2626;
-    }
-
-    .sidebar button.gray {
-      background: #374151;
-    }
-
-    .sidebar button.gray:hover {
-      background: #4b5563;
     }
 
     /* ---------- MAIN ---------- */
@@ -85,6 +29,8 @@
       flex-direction: column;
       gap: 16px;
       background: #020617;
+      min-height: 0;
+      /* important so terminal can shrink + scroll */
     }
 
     /* ---------- TOP BAR ---------- */
@@ -127,6 +73,8 @@
 
     .terminal {
       flex: 1;
+      min-height: 0;
+      /* important so #out can scroll */
       background: #0f172a;
       color: #00ff9c;
       padding: 12px;
@@ -190,102 +138,28 @@
 <body>
 
   <div class="app">
-
-    <!-- ================= SIDEBAR ================= -->
-
-    <div class="sidebar">
-
-      <input id="adminPass" type="password" placeholder="Password">
-
-      <input id="fileId" placeholder="File ID">
-
-      <select id="newLabel">
-        <option value="real">Real</option>
-        <option value="fake">Fake</option>
-      </select>
-
-      <button onclick="updateLabel()">Change Label</button>
-
-      <button class="red" onclick="deleteFile()">Delete File</button>
-
-      <button onclick="loadAdminLogs()">Show Logs</button>
-
-      <button onclick="showAdminLinks()">Admin Links</button>
-
-    </div>
-
-
-    <!-- ================= MAIN ================= -->
-
     <div class="main">
 
       <!-- ---------- TOP BAR ---------- -->
-
       <div class="topbar">
 
-        <!-- CHECK -->
         <div class="block">
-
           <div class="title">🔍 Check PDF</div>
 
           <input id="checkFile" type="file" accept="application/pdf">
-
           <button onclick="checkPdf()">Check PDF</button>
-
-        </div>
-
-
-        <!-- ADD -->
-        <div class="block">
-
-          <div class="title">➕ Add PDFs</div>
-
-          <input id="addFile" type="file" accept="application/pdf" multiple>
-
-          <select id="label">
-            <option value="real">Real</option>
-            <option value="fake">Fake</option>
-          </select>
-
-          <button onclick="addPdf()">Add PDFs to DB</button>
-
-        </div>
-
-
-        <!-- DATABASE -->
-        <div class="block">
-
-          <div class="title">📂 Database</div>
-
-          <button onclick="loadDB()">Show Database</button>
-
-          <select id="searchType">
-            <option value="name">By Name</option>
-            <option value="id">By ID</option>
-          </select>
-
-          <input id="searchBox" placeholder="Search...">
-
-          <button onclick="searchDB()">Search in Database</button>
-
-          <button onclick="downloadDB()">Download Database</button>
-
         </div>
 
       </div>
 
-
       <!-- ---------- TERMINAL ---------- -->
-
       <div class="terminal">
 
         <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-
           <button onclick="clearLog()"
             style="background:#374151;color:white;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:12px">
             Clear
           </button>
-
         </div>
 
         <div id="out">...</div>
@@ -293,14 +167,9 @@
       </div>
 
     </div>
-
   </div>
 
-
-  <!-- ================= SCRIPT ================= -->
-
   <script>
-
     const outEl = document.getElementById("out");
 
     const show = (t) => outEl.textContent = t;
@@ -309,304 +178,24 @@
       show("Cleared.");
     }
 
-
     // ================= CHECK =================
-
     async function checkPdf() {
-
       const f = document.getElementById("checkFile").files[0];
-
       if (!f) return show("❌ Pick PDF");
 
-      show("⏳ Checking...");
+      show("⏳ Uploading...");
 
       const fd = new FormData();
       fd.append("file", f);
 
       try {
-
         const r = await fetch("/check", { method: "POST", body: fd });
         const j = await r.json();
-
-        if (j.matched_with) {
-
-          const link = location.origin + j.matched_with.url;
-
-          outEl.innerHTML =
-            j.message + "<br><br>" +
-            `#${j.matched_with.id} | ${j.matched_with.filename}<br>` +
-            `<a class="open-btn" target="_blank" href="${link}">Open PDF</a>`;
-
-          return;
-        }
-
-        show(j.message);
-
+        show(j.message || JSON.stringify(j));
       } catch {
-
         show("❌ Server error");
-
       }
     }
-
-
-    // ================= ADD MULTI =================
-
-    async function addPdf() {
-
-      const input = document.getElementById("addFile");
-      const label = document.getElementById("label").value;
-
-      const files = input.files;
-
-      if (!files.length) return show("❌ Pick PDFs");
-
-      show(`⏳ Uploading ${files.length} files...`);
-
-      for (let i = 0; i < files.length; i++) {
-
-        const fd = new FormData();
-        fd.append("label", label);
-        fd.append("file", files[i]);
-
-        try {
-
-          const r = await fetch("/add", { method: "POST", body: fd });
-          const j = await r.json();
-
-          show(`✔ ${files[i].name}: ${j.message || j.error}`);
-
-        } catch {
-
-          show(`❌ ${files[i].name}: failed`);
-
-        }
-      }
-
-      input.value = "";
-    }
-
-
-    // ================= DATABASE =================
-
-    async function loadDB() {
-
-      show("⏳ Loading DB...");
-
-      try {
-
-        const r = await fetch("/files");
-        const list = await r.json();
-
-        if (!list.length) return show("Empty DB");
-
-        let html = "<b>DATABASE</b><br><br>";
-
-        list.forEach(f => {
-
-          const link = location.origin + "/open/" + f.id;
-
-          html += `#${f.id} | ${f.label.toUpperCase()} | ${f.filename}<br>`;
-          html += `<a class="open-btn" target="_blank" href="${link}">Open</a><br><br>`;
-
-        });
-
-        outEl.innerHTML = html;
-
-      } catch {
-
-        show("❌ Failed");
-
-      }
-    }
-
-
-    // ================= SEARCH =================
-
-    async function searchDB() {
-
-      const q = document.getElementById("searchBox").value.trim();
-      const type = document.getElementById("searchType").value;
-
-      if (!q) return show("❌ Enter text");
-
-      show("⏳ Searching...");
-
-      try {
-
-        // Search by ID
-        if (type === "id") {
-
-          if (isNaN(q)) return show("❌ ID must be number");
-
-          const r = await fetch("/files");
-          const list = await r.json();
-
-          const f = list.find(x => x.id == q);
-
-          if (!f) return show("❌ Not found");
-
-          const link = location.origin + "/open/" + f.id;
-
-          outEl.innerHTML =
-            `<b>RESULT</b><br><br>
-             #${f.id} | ${f.label.toUpperCase()} | ${f.filename}<br>
-             <a class="open-btn" target="_blank" href="${link}">Open</a>`;
-
-          return;
-        }
-
-
-        // Search by name
-        const r = await fetch("/search?q=" + encodeURIComponent(q));
-        const list = await r.json();
-
-        if (!list.length) return show("No results");
-
-        let html = "<b>RESULTS</b><br><br>";
-
-        list.forEach(f => {
-
-          const link = location.origin + "/open/" + f.id;
-
-          html += `#${f.id} | ${f.label.toUpperCase()} | ${f.filename}<br>`;
-          html += `<a class="open-btn" target="_blank" href="${link}">Open</a><br><br>`;
-
-        });
-
-        outEl.innerHTML = html;
-
-      } catch {
-
-        show("❌ Failed");
-
-      }
-    }
-
-
-    // ================= LABEL =================
-
-    async function updateLabel() {
-
-      const id = fileId.value.trim();
-      const pw = adminPass.value.trim();
-      const label = newLabel.value;
-
-      if (!id || isNaN(id)) return show("❌ Invalid ID");
-      if (!pw) return show("❌ Password");
-
-      show("⏳ Updating...");
-
-      const fd = new FormData();
-      fd.append("file_id", id);
-      fd.append("label", label);
-      fd.append("password", pw);
-
-      try {
-
-        const r = await fetch("/admin/label", { method: "POST", body: fd });
-        const j = await r.json();
-
-        show(j.message || j.error);
-
-      } catch {
-
-        show("❌ Error");
-
-      }
-
-      adminPass.value = "";
-    }
-
-
-    // ================= DELETE =================
-
-    async function deleteFile() {
-
-      const id = fileId.value.trim();
-      const pw = adminPass.value.trim();
-
-      if (!id || isNaN(id)) return show("❌ Invalid ID");
-      if (!pw) return show("❌ Password");
-
-      if (!confirm("Delete file?")) return;
-
-      show("⏳ Deleting...");
-
-      const fd = new FormData();
-      fd.append("file_id", id);
-      fd.append("password", pw);
-
-      try {
-
-        const r = await fetch("/admin/delete", { method: "POST", body: fd });
-        const j = await r.json();
-
-        show(j.message || j.error);
-
-      } catch {
-
-        show("❌ Error");
-
-      }
-
-      adminPass.value = "";
-    }
-
-
-    // ================= ADMIN =================
-
-    function showAdminLinks() {
-
-      show(
-        "ADMIN LINKS\n\n" +
-        location.origin + "/admin/reset_db\n" +
-        location.origin + "/admin/logs"
-      );
-    }
-
-
-    async function loadAdminLogs() {
-
-      show("⏳ Loading logs...");
-
-      try {
-
-        const r = await fetch("/admin/logs");
-        const list = await r.json();
-
-        if (!list.length) return show("No logs");
-
-        let out = "LOGS\n\n";
-
-        list.forEach(l => {
-
-          out += `[${l.created_at}] ${l.action}`;
-
-          if (l.details) out += " (" + l.details + ")";
-
-          out += "\n";
-
-        });
-
-        show(out);
-
-      } catch {
-
-        show("❌ Failed");
-
-      }
-    }
-
-
-    // ================= DOWNLOAD =================
-
-    function downloadDB() {
-
-      window.open("/admin/export", "_blank");
-
-    }
-
   </script>
 
 </body>
