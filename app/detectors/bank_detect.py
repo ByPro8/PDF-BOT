@@ -113,6 +113,10 @@ def is_vakifbank(text: str) -> bool:
     return "vakifbank.com.tr" in text
 
 
+def is_vakifkatilim(text: str) -> bool:
+    return "vakifkatilim.com.tr" in text
+
+
 def is_teb(text: str) -> bool:
     return "teb.com.tr" in text
 
@@ -160,6 +164,7 @@ DETECTORS: List[Tuple[str, str, Optional[str], Callable[[str], bool]]] = [
     ("ENPARA", "Enpara", None, is_enpara),
     ("GARANTI", "Garanti", None, is_garanti),
     ("VAKIFBANK", "VakifBank", None, is_vakifbank),
+    ("VAKIFKATILIM", "VakifKatilim", None, is_vakifkatilim),
     ("TEB", "TEB", None, is_teb),
     ("KUVEYT_TURK", "KuveytTurk", None, is_kuveyt_turk),
     ("ING", "ING", None, is_ing),
