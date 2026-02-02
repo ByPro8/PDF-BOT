@@ -138,10 +138,75 @@
     const outEl = document.getElementById("out");
     const btn = document.getElementById("checkBtn");
 
-    const show = (t) => outEl.textContent = t;
+    // Use HTML output (so we can color specific parts)
+    const show = (html) => outEl.innerHTML = html;
 
     function clearLog() {
       show("Cleared.");
+    }
+
+    function esc(s) {
+      return String(s)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+    }
+
+    function formatDataHtml(d) {
+      if (!d) return esc("No data");
+      if (typeof d !== "object") return esc(String(d));
+
+      const order = [
+        "sender_name",
+        "receiver_name",
+        "receiver_iban",
+        "amount",
+        "transaction_time",
+        "receipt_no",
+        "transaction_ref",
+        "error",
+      ];
+
+      const highlight = new Set([
+        "receiver_name",
+        "receiver_iban",
+        "amount",
+        "transaction_time",
+      ]);
+
+      const rows = [];
+
+      // known keys (skip null/empty)
+      for (const k of order) {
+        const v = d[k];
+        if (v === undefined || v === null) continue;
+        const s = String(v).trim();
+        if (!s) continue;
+        rows.push([k, s]);
+      }
+
+      // extra keys (also skip null/empty)
+      for (const k of Object.keys(d)) {
+        if (order.includes(k)) continue;
+        const v = d[k];
+        if (v === undefined || v === null) continue;
+        const s = String(v).trim();
+        if (!s) continue;
+        rows.push([k, s]);
+      }
+
+      if (!rows.length) return esc("No fields");
+
+      const maxKeyLen = rows.reduce((m, [k]) => Math.max(m, k.length), 0);
+
+      // IMPORTANT: use &nbsp; for padding so alignment stays in HTML
+      return rows.map(([k, v]) => {
+        const pad = "&nbsp;".repeat(Math.max(0, maxKeyLen - k.length));
+        const keyPart = `<span>${esc(k)}${pad}</span>`;
+        const valClass = highlight.has(k) ? "val-hi" : "val";
+        const valPart = `<span class="${valClass}">${esc(v)}</span>`;
+        return `${keyPart}&nbsp;&nbsp;${valPart}`;
+      }).join("<br>");
     }
 
     async function checkPdf() {
@@ -159,11 +224,11 @@
         const j = await r.json();
 
         show(
-          `✅ Uploaded: ${f.name}\n\n` +
-          `BANK: ${j.detected?.bank} (${j.detected?.variant || "no variant"})\n` +
-          `METHOD: ${j.detected?.method}\n\n` +
-          `DATA:\n${JSON.stringify(j.data, null, 2)}\n\n` +
-          (j.error ? `ERROR:\n${j.error}\n` : "")
+          `✅ Uploaded: ${esc(f.name)}<br><br>` +
+          `BANK: ${esc(j.detected?.bank)} (${esc(j.detected?.variant || "no variant")})<br>` +
+          `METHOD: ${esc(j.detected?.method)}<br><br>` +
+          `DATA:<br>${formatDataHtml(j.data)}<br><br>` +
+          (j.error ? `ERROR:<br>${esc(j.error)}<br>` : "")
         );
       } catch {
         show("❌ Server error");
@@ -171,6 +236,17 @@
         if (btn) btn.disabled = false;
       }
     }
+
+    // Inject small CSS for highlighted values
+    // (keeps your original terminal green, and makes highlights brighter)
+    (function addStyles() {
+      const style = document.createElement("style");
+      style.textContent = `
+      .val { color: #00ff9c; }
+      .val-hi { color: #39ff14; font-weight: 700; }
+    `;
+      document.head.appendChild(style);
+    })();
   </script>
 
 </body>

@@ -1,6 +1,6 @@
-# main.py (only the /check endpoint + helpers shown)
 import os
 import tempfile
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI, UploadFile, File
@@ -15,6 +15,10 @@ app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
 USE_OCR = os.getenv("USE_OCR", "0") == "1"
+
+log = logging.getLogger("pdf-checker")
+if not log.handlers:
+    logging.basicConfig(level=logging.INFO)
 
 
 def save_temp(upload: UploadFile) -> Path:
@@ -38,11 +42,40 @@ async def check_pdf(file: UploadFile = File(...)):
     try:
         detected = detect_bank_variant(path, use_ocr_fallback=USE_OCR)
 
-        data = None
         try:
             data = parse_by_key(detected["key"], path)
         except Exception as e:
             data = {"error": f"{type(e).__name__}: {e}"}
+
+        # --- Pretty terminal log (no JSON quotes) ---
+        try:
+            log.info("---- UPLOAD ----")
+            log.info("file: %s", file.filename)
+
+            log.info("---- DETECTED ----")
+            log.info("key: %s", detected.get("key"))
+            log.info("bank: %s", detected.get("bank"))
+            log.info("variant: %s", detected.get("variant"))
+            log.info("method: %s", detected.get("method"))
+
+            log.info("---- DATA ----")
+            if isinstance(data, dict) and data is not None:
+                for k in [
+                    "sender_name",
+                    "receiver_name",
+                    "receiver_iban",
+                    "amount",
+                    "transaction_time",
+                    "receipt_no",
+                    "transaction_ref",
+                    "error",
+                ]:
+                    if k in data:
+                        log.info("%s: %s", k, data.get(k))
+            else:
+                log.info("data: %s", data)
+        except Exception:
+            pass
 
         return {
             "message": f"Uploaded: {file.filename}",
@@ -51,6 +84,7 @@ async def check_pdf(file: UploadFile = File(...)):
         }
 
     except Exception as e:
+        log.error("Upload failed: %s (%s: %s)", file.filename, type(e).__name__, e)
         return {
             "message": f"Upload failed: {file.filename}",
             "error": f"{type(e).__name__}: {e}",

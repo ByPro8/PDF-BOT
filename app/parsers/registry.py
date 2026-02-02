@@ -2,11 +2,13 @@ from pathlib import Path
 from typing import Dict, Callable, Optional
 
 from app.parsers.tombank.parser import parse_tombank
+from app.parsers.pttbank.parser import parse_pttbank
 
 ParserFn = Callable[[Path], Dict]
 
 PARSERS: dict[str, ParserFn] = {
     "TOMBANK": parse_tombank,
+    "PTTBANK": parse_pttbank,
 }
 
 
@@ -21,6 +23,7 @@ def parse_by_key(key: str, pdf_path: Path) -> Optional[Dict]:
         return {
             "sender_name": None,
             "receiver_name": None,
+            "receiver_iban": None,
             "amount": None,
             "transaction_time": None,
             "receipt_no": None,

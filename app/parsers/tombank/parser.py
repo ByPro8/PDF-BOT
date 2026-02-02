@@ -1,6 +1,5 @@
-# app/parsers/tombank/parser.py
-import os
 import re
+import os
 import logging
 from pathlib import Path
 from typing import Optional, Dict
@@ -23,23 +22,11 @@ def _extract_text(pdf_path: Path, max_pages: int = 2) -> str:
 
 
 def _norm(s: str) -> str:
-    """
-    Normalizes Turkish text reliably.
-    IMPORTANT: casefold() can turn "İ" into "i\\u0307" (i + combining dot),
-    so we remove the combining dot to avoid mismatches.
-    """
     if not s:
         return ""
     s = s.casefold().replace("\u0307", "")
     tr_map = str.maketrans(
-        {
-            "ı": "i",
-            "ö": "o",
-            "ü": "u",
-            "ş": "s",
-            "ğ": "g",
-            "ç": "c",
-        }
+        {"ı": "i", "ö": "o", "ü": "u", "ş": "s", "ğ": "g", "ç": "c"}
     )
     s = s.translate(tr_map)
     s = re.sub(r"\s+", " ", s)
@@ -47,11 +34,6 @@ def _norm(s: str) -> str:
 
 
 def _flex_datetime_from_text(text: str) -> Optional[str]:
-    """
-    Extracts datetime even if digits are spaced like:
-      3 1 . 0 1 . 2 0 2 6  1 6 : 3 1
-    Returns normalized: DD.MM.YYYY HH:MM
-    """
     m = re.search(
         r"((?:\d\s*){2})\.\s*((?:\d\s*){2})\.\s*((?:\d\s*){4})\s+((?:\d\s*){2})\:\s*((?:\d\s*){2})",
         text,
@@ -65,30 +47,19 @@ def _flex_datetime_from_text(text: str) -> Optional[str]:
     hh = re.sub(r"\s+", "", m.group(4))
     mi = re.sub(r"\s+", "", m.group(5))
 
-    if not (
-        len(dd) == 2
-        and len(mm) == 2
-        and len(yyyy) == 4
-        and len(hh) == 2
-        and len(mi) == 2
-    ):
+    if not (len(dd) == 2 and len(mm) == 2 and len(yyyy) == 4 and len(hh) == 2 and len(mi) == 2):
         return None
 
     return f"{dd}.{mm}.{yyyy} {hh}:{mi}"
 
 
 def _value_after_label(lines: list[str], label: str) -> Optional[str]:
-    """
-    Handles both:
-      1) <Label> then next line is value
-      2) <Label>: <Value> on same line
-    """
     want = _norm(label)
 
     for i, ln in enumerate(lines):
         nln = _norm(ln)
 
-        # Case A: exact label line -> next line
+        # exact label line -> next line
         if nln == want:
             j = i + 1
             while j < len(lines) and not lines[j].strip():
@@ -97,14 +68,12 @@ def _value_after_label(lines: list[str], label: str) -> Optional[str]:
                 return lines[j].strip()
             return None
 
-        # Case B: inline form
+        # inline: label: value
         if nln.startswith(want):
             if ":" in ln:
                 after = ln.split(":", 1)[1].strip()
                 if after:
                     return after
-
-            # If no ":", try to pull datetime from the line (if relevant)
             dt = _flex_datetime_from_text(ln)
             if dt:
                 return dt
@@ -113,37 +82,30 @@ def _value_after_label(lines: list[str], label: str) -> Optional[str]:
 
 
 def _extract_time_tombank(raw: str, lines: list[str]) -> Optional[str]:
-    """
-    Multiple strategies:
-      1) label-based (lines)
-      2) search near label in normalized full text
-      3) scan all normalized text for first datetime
-    """
-    # 1) Label based
     t1 = _value_after_label(lines, "İşlem Tarihi")
     if t1:
         return _flex_datetime_from_text(t1) or t1.strip()
 
-    # 2) Look near label in normalized raw
     norm_raw = _norm(raw)
 
-    label_hit = re.search(r"islem\s*tarihi", norm_raw)
-    if not label_hit:
-        label_hit = re.search(r"islemtarihi", norm_raw)
-
-    if label_hit:
-        start = label_hit.start()
-        window = norm_raw[start : start + 120]
+    hit = re.search(r"islem\s*tarihi", norm_raw) or re.search(r"islemtarihi", norm_raw)
+    if hit:
+        window = norm_raw[hit.start(): hit.start() + 120]
         t2 = _flex_datetime_from_text(window)
         if t2:
             return t2
 
-    # 3) Last resort: scan all normalized raw
     t3 = _flex_datetime_from_text(norm_raw)
     if t3:
         return t3
 
     return None
+
+
+def _clean_iban(s: Optional[str]) -> Optional[str]:
+    if not s:
+        return None
+    return re.sub(r"\s+", " ", s).strip()
 
 
 def parse_tombank(pdf_path: Path) -> Dict:
@@ -152,19 +114,20 @@ def parse_tombank(pdf_path: Path) -> Dict:
 
     sender = _value_after_label(lines, "Gönderen Kişi")
     receiver = _value_after_label(lines, "Gönderilen Kişi")
+    receiver_iban = _clean_iban(_value_after_label(lines, "Gönderilen IBAN"))
+
     amount = _value_after_label(lines, "Tutar")
-
     transaction_time = _extract_time_tombank(raw, lines)
-
     receipt_no = _value_after_label(lines, "Sorgu Numarası")
     transaction_ref = _value_after_label(lines, "İşlem Referansı")
 
     if DEBUG:
-        log.info("TOMBANK parsed transaction_time=%r", transaction_time)
+        log.info("TOMBANK parsed receiver_iban=%r transaction_time=%r", receiver_iban, transaction_time)
 
     return {
         "sender_name": sender,
         "receiver_name": receiver,
+        "receiver_iban": receiver_iban,
         "amount": amount,
         "transaction_time": transaction_time,
         "receipt_no": receipt_no,
