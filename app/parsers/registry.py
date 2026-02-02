@@ -3,12 +3,14 @@ from typing import Dict, Callable, Optional
 
 from app.parsers.tombank.parser import parse_tombank
 from app.parsers.pttbank.parser import parse_pttbank
+from app.parsers.qnb.parser import parse_qnb
 
 ParserFn = Callable[[Path], Dict]
 
 PARSERS: dict[str, ParserFn] = {
     "TOMBANK": parse_tombank,
     "PTTBANK": parse_pttbank,
+    "QNB": parse_qnb,
 }
 
 
