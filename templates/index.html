@@ -181,18 +181,37 @@
     // ================= CHECK =================
     async function checkPdf() {
       const f = document.getElementById("checkFile").files[0];
-      if (!f) return show("❌ Pick PDF");
+      if (!f) return show("❌ Pick a PDF first");
 
-      show("⏳ Uploading...");
+      // temp / loading text
+      show(`⏳ Uploading & detecting bank...`);
 
       const fd = new FormData();
       fd.append("file", f);
 
       try {
         const r = await fetch("/check", { method: "POST", body: fd });
+
+        // handle non-200 cleanly
+        if (!r.ok) {
+          const txt = await r.text().catch(() => "");
+          return show(`❌ Server returned ${r.status}\n${txt}`);
+        }
+
         const j = await r.json();
-        show(j.message || JSON.stringify(j));
-      } catch {
+
+        // pretty output (matches the new backend response)
+        const lines = [
+          j.message || "✅ Done",
+          "",
+          `File: ${j.filename || f.name}`,
+          `Bank: ${j.bank || "Unknown"}`,
+          `Variant: ${j.variant || "—"}`,
+          `Method: ${j.method || "—"}`,
+        ];
+
+        show(lines.join("\n"));
+      } catch (e) {
         show("❌ Server error");
       }
     }
