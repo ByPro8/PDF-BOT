@@ -9,22 +9,17 @@ def normalize_text(s: str) -> str:
     if not s:
         return ""
 
-    s = s.casefold()
+    # casefold() can turn "İ" into "i\u0307" (i + combining dot)
+    s = s.casefold().replace("\u0307", "")
 
     tr_map = str.maketrans(
         {
             "ı": "i",
-            "İ": "i",
             "ö": "o",
-            "Ö": "o",
             "ü": "u",
-            "Ü": "u",
             "ş": "s",
-            "Ş": "s",
             "ğ": "g",
-            "Ğ": "g",
             "ç": "c",
-            "Ç": "c",
         }
     )
 
@@ -113,7 +108,7 @@ def is_vakifbank(text: str) -> bool:
     return "vakifbank.com.tr" in text
 
 
-def is_vakifkatilim(text: str) -> bool:
+def is_vakif_katilim(text: str) -> bool:
     return "vakifkatilim.com.tr" in text
 
 
@@ -164,7 +159,7 @@ DETECTORS: List[Tuple[str, str, Optional[str], Callable[[str], bool]]] = [
     ("ENPARA", "Enpara", None, is_enpara),
     ("GARANTI", "Garanti", None, is_garanti),
     ("VAKIFBANK", "VakifBank", None, is_vakifbank),
-    ("VAKIFKATILIM", "VakifKatilim", None, is_vakifkatilim),
+    ("VAKIFKATILIM", "VakifKatilim", None, is_vakif_katilim),
     ("TEB", "TEB", None, is_teb),
     ("KUVEYT_TURK", "KuveytTurk", None, is_kuveyt_turk),
     ("ING", "ING", None, is_ing),

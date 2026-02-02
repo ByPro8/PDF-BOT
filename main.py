@@ -1,3 +1,4 @@
+# main.py (only the /check endpoint + helpers shown)
 import os
 import tempfile
 from pathlib import Path
@@ -8,12 +9,22 @@ from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
 from app.detectors.bank_detect import detect_bank_variant
+from app.parsers.registry import parse_by_key
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
-# later you can set USE_OCR=1 on Render if you add OCR deps
 USE_OCR = os.getenv("USE_OCR", "0") == "1"
+
+
+def save_temp(upload: UploadFile) -> Path:
+    suffix = Path(upload.filename or "upload.pdf").suffix or ".pdf"
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    try:
+        tmp.write(upload.file.read())
+    finally:
+        tmp.close()
+    return Path(tmp.name)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -23,31 +34,30 @@ def home(request: Request):
 
 @app.post("/check")
 async def check_pdf(file: UploadFile = File(...)):
-    if not file.filename:
-        return {"error": "Missing filename"}
-
-    suffix = Path(file.filename).suffix or ".pdf"
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
-
+    path = save_temp(file)
     try:
-        tmp.write(await file.read())
-        tmp.flush()
-        tmp_path = Path(tmp.name)
+        detected = detect_bank_variant(path, use_ocr_fallback=USE_OCR)
 
-        hit = detect_bank_variant(tmp_path, use_ocr_fallback=USE_OCR)
+        data = None
+        try:
+            data = parse_by_key(detected["key"], path)
+        except Exception as e:
+            data = {"error": f"{type(e).__name__}: {e}"}
 
         return {
-            "message": "Uploaded ✅",
-            "filename": file.filename,
-            "bank": hit["bank"],
-            "variant": hit["variant"],
-            "method": hit["method"],
+            "message": f"Uploaded: {file.filename}",
+            "detected": detected,
+            "data": data,
         }
 
+    except Exception as e:
+        return {
+            "message": f"Upload failed: {file.filename}",
+            "error": f"{type(e).__name__}: {e}",
+        }
     finally:
         try:
-            tmp.close()
-            os.unlink(tmp.name)
+            path.unlink(missing_ok=True)
         except Exception:
             pass
 

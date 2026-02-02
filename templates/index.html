@@ -13,15 +13,11 @@
       color: #e5e7eb;
     }
 
-    /* ---------- LAYOUT ---------- */
-
     .app {
       display: grid;
       grid-template-columns: 1fr;
       height: 100vh;
     }
-
-    /* ---------- MAIN ---------- */
 
     .main {
       padding: 20px;
@@ -30,10 +26,7 @@
       gap: 16px;
       background: #020617;
       min-height: 0;
-      /* important so terminal can shrink + scroll */
     }
-
-    /* ---------- TOP BAR ---------- */
 
     .topbar {
       background: #020617;
@@ -69,12 +62,9 @@
       background: #2563eb;
     }
 
-    /* ---------- TERMINAL ---------- */
-
     .terminal {
       flex: 1;
       min-height: 0;
-      /* important so #out can scroll */
       background: #0f172a;
       color: #00ff9c;
       padding: 12px;
@@ -92,25 +82,6 @@
       overflow-y: auto;
       white-space: pre-wrap;
     }
-
-    /* ---------- BUTTON ---------- */
-
-    .open-btn {
-      display: inline-block;
-      padding: 4px 10px;
-      background: #16a34a;
-      color: white;
-      border-radius: 4px;
-      text-decoration: none;
-      font-size: 12px;
-      margin-top: 6px;
-    }
-
-    .open-btn:hover {
-      background: #22c55e;
-    }
-
-    /* ----- TOPBAR BLOCKS ----- */
 
     .block {
       display: flex;
@@ -140,21 +111,16 @@
   <div class="app">
     <div class="main">
 
-      <!-- ---------- TOP BAR ---------- -->
       <div class="topbar">
-
         <div class="block">
           <div class="title">🔍 Check PDF</div>
 
           <input id="checkFile" type="file" accept="application/pdf">
-          <button onclick="checkPdf()">Check PDF</button>
+          <button id="checkBtn" onclick="checkPdf()">Check PDF</button>
         </div>
-
       </div>
 
-      <!-- ---------- TERMINAL ---------- -->
       <div class="terminal">
-
         <div style="display:flex;justify-content:space-between;margin-bottom:6px">
           <button onclick="clearLog()"
             style="background:#374151;color:white;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:12px">
@@ -163,7 +129,6 @@
         </div>
 
         <div id="out">...</div>
-
       </div>
 
     </div>
@@ -171,6 +136,7 @@
 
   <script>
     const outEl = document.getElementById("out");
+    const btn = document.getElementById("checkBtn");
 
     const show = (t) => outEl.textContent = t;
 
@@ -178,41 +144,31 @@
       show("Cleared.");
     }
 
-    // ================= CHECK =================
     async function checkPdf() {
       const f = document.getElementById("checkFile").files[0];
-      if (!f) return show("❌ Pick a PDF first");
+      if (!f) return show("❌ Pick PDF");
 
-      // temp / loading text
-      show(`⏳ Uploading & detecting bank...`);
+      show("⏳ Uploading...");
+      if (btn) btn.disabled = true;
 
       const fd = new FormData();
       fd.append("file", f);
 
       try {
         const r = await fetch("/check", { method: "POST", body: fd });
-
-        // handle non-200 cleanly
-        if (!r.ok) {
-          const txt = await r.text().catch(() => "");
-          return show(`❌ Server returned ${r.status}\n${txt}`);
-        }
-
         const j = await r.json();
 
-        // pretty output (matches the new backend response)
-        const lines = [
-          j.message || "✅ Done",
-          "",
-          `File: ${j.filename || f.name}`,
-          `Bank: ${j.bank || "Unknown"}`,
-          `Variant: ${j.variant || "—"}`,
-          `Method: ${j.method || "—"}`,
-        ];
-
-        show(lines.join("\n"));
-      } catch (e) {
+        show(
+          `✅ Uploaded: ${f.name}\n\n` +
+          `BANK: ${j.detected?.bank} (${j.detected?.variant || "no variant"})\n` +
+          `METHOD: ${j.detected?.method}\n\n` +
+          `DATA:\n${JSON.stringify(j.data, null, 2)}\n\n` +
+          (j.error ? `ERROR:\n${j.error}\n` : "")
+        );
+      } catch {
         show("❌ Server error");
+      } finally {
+        if (btn) btn.disabled = false;
       }
     }
   </script>
