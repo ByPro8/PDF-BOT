@@ -161,12 +161,23 @@
       // Strong highlight colors (easy to notice)
       const statusDisplay = (v) => {
         const st = String(v ?? "").toLowerCase();
-        if (st === "completed") return { text: "✅", color: "#00ffa6" };
-        if (st === "unknown" || !st) {
-          return { text: "unknown — save the file and send it the creator to update the BOT", color: "#ff4d4d" };
+
+        // If parser includes the word "completed" anywhere
+        if (st.includes("completed")) return { text: "✅", color: "#00ffa6" };
+
+        // If parser includes "unknown" anywhere (or empty)
+        if (!st || st.includes("unknown")) {
+          return {
+            text: "unknown — save the file and send it the creator to update the BOT",
+            color: "#ff4d4d"
+          };
         }
-        return { text: "❌ not completed transaction", color: "#ff4d4d" };
+
+        // Pending / canceled / etc should NOT be treated as "not completed" unless explicitly said
+        // So we display the raw status in red (safer than guessing).
+        return { text: v, color: "#ff4d4d" };
       };
+
 
       const valueColor = (k, v) => {
         if (k === "tr_status") return statusDisplay(v).color;
