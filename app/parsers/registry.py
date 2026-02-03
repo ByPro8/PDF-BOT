@@ -9,6 +9,7 @@ from app.parsers.isbank.parser import parse_isbank
 from app.parsers.turkiyefinans.parser import parse_turkiyefinans
 from app.parsers.ing.parser import parse_ing
 from app.parsers.teb.parser import parse_teb
+from app.parsers.vakifkatilim.parser import parse_vakifkatilim
 
 from app.parsers.kuveytturk.en.parser import parse_kuveyt_turk_en
 from app.parsers.kuveytturk.tr.parser import parse_kuveyt_turk_tr
@@ -26,6 +27,7 @@ PARSERS: dict[str, ParserFn] = {
     "TURKIYE_FINANS": parse_turkiyefinans,
     "ING": parse_ing,
     "TEB": parse_teb,
+    "VAKIF_KATILIM": parse_vakifkatilim,
 
     # KuveytTurk variants
     "KUVEYT_TURK_EN": parse_kuveyt_turk_en,

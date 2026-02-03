@@ -73,6 +73,12 @@ def is_teb(text: str) -> bool:
     return ("www.teb.com.tr" in t) or ("teb.com.tr" in t)
 
 
+
+def is_vakif_katilim(text: str) -> bool:
+    t = normalize_text(text)
+    return ("www.vakifkatilim.com.tr" in t) or ("vakifkatilim.com.tr" in t)
+
+
 def is_qnb(text: str) -> bool:
     t = normalize_text(text)
     return ("www.qnb.com.tr" in t) or ("qnb.com.tr" in t)
@@ -116,6 +122,7 @@ DETECTORS: list[Detector] = [
     ("TURKIYE_FINANS", "TurkiyeFinans", None, is_turkiye_finans),
     ("ING", "ING", None, is_ing),
     ("TEB", "TEB", None, is_teb),
+    ("VAKIF_KATILIM", "VakifKatilim", None, is_vakif_katilim),
 
     # KuveytTurk variants first
     ("KUVEYT_TURK_EN", "KuveytTurk", "EN", is_kuveyt_turk_en),
