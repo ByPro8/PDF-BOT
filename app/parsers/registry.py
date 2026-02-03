@@ -7,6 +7,8 @@ from app.parsers.qnb.parser import parse_qnb
 from app.parsers.halkbank.parser import parse_halkbank
 from app.parsers.isbank.parser import parse_isbank
 from app.parsers.turkiyefinans.parser import parse_turkiyefinans
+from app.parsers.ing.parser import parse_ing
+
 
 ParserFn = Callable[[Path], Dict]
 
@@ -17,6 +19,7 @@ PARSERS: dict[str, ParserFn] = {
     "HALKBANK": parse_halkbank,
     "ISBANK": parse_isbank,
     "TURKIYE_FINANS": parse_turkiyefinans,
+    "ING": parse_ing,
 }
 
 
