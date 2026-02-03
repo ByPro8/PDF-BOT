@@ -290,7 +290,7 @@ def _detect_status(raw: str) -> str:
             return "✅ completed"
 
     # Otherwise: unknown, manual check
-    return "❌ unknown — pdf does not state status, check manually"
+    return "unknown — pdf does not state status, check manually"
 
 
 # ----------------------------

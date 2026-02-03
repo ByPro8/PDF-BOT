@@ -1,0 +1,1 @@
+# kuveytturk turkish variant

@@ -9,6 +9,10 @@ from app.parsers.isbank.parser import parse_isbank
 from app.parsers.turkiyefinans.parser import parse_turkiyefinans
 from app.parsers.ing.parser import parse_ing
 
+from app.parsers.kuveytturk.en.parser import parse_kuveyt_turk_en
+from app.parsers.kuveytturk.tr.parser import parse_kuveyt_turk_tr
+from app.parsers.kuveytturk.parser import parse_kuveyt_turk_unknown
+
 
 ParserFn = Callable[[Path], Dict]
 
@@ -20,6 +24,11 @@ PARSERS: dict[str, ParserFn] = {
     "ISBANK": parse_isbank,
     "TURKIYE_FINANS": parse_turkiyefinans,
     "ING": parse_ing,
+
+    # KuveytTurk variants
+    "KUVEYT_TURK_EN": parse_kuveyt_turk_en,
+    "KUVEYT_TURK_TR": parse_kuveyt_turk_tr,
+    "KUVEYT_TURK": parse_kuveyt_turk_unknown,
 }
 
 

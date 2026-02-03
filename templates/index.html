@@ -134,7 +134,7 @@
 
     function colorForStatus(status) {
       status = String(status ?? "").toLowerCase();
-      if (status === "unknown" || !status) return "#ff4d4d";
+      if (status === "unknown" || !status) return "#ffd166";
       if (status === "pending") return "#ffd166";
       if (status === "failed" || status === "canceled") return "#ff4d4d";
       if (status === "completed") return "#00ffa6";
@@ -172,7 +172,7 @@
         if (!st || st.includes("unknown")) {
           return {
             text: raw || "unknown — PDF does not state status; check manually (written in UI)",
-            color: "#ff4d4d"
+            color: "#ffd166"
           };
         }
 
