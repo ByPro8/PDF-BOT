@@ -160,23 +160,26 @@
 
       // Strong highlight colors (easy to notice)
       const statusDisplay = (v) => {
-        const st = String(v ?? "").toLowerCase();
+        const raw = String(v ?? "");
+        const st = raw.toLowerCase();
 
-        // If parser includes the word "completed" anywhere
-        if (st.includes("completed")) return { text: "✅", color: "#00ffa6" };
+        // Completed
+        if (st.includes("completed")) {
+          return { text: "✅", color: "#00ffa6" };
+        }
 
-        // If parser includes "unknown" anywhere (or empty)
+        // Unknown → show backend message, do NOT override
         if (!st || st.includes("unknown")) {
           return {
-            text: "unknown — save the file and send it the creator to update the BOT",
+            text: raw || "unknown — PDF does not state status; check manually (written in UI)",
             color: "#ff4d4d"
           };
         }
 
-        // Pending / canceled / etc should NOT be treated as "not completed" unless explicitly said
-        // So we display the raw status in red (safer than guessing).
-        return { text: v, color: "#ff4d4d" };
+        // Pending / canceled / others → show as-is
+        return { text: raw, color: "#ff4d4d" };
       };
+
 
 
       const valueColor = (k, v) => {
