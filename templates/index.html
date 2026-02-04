@@ -2,7 +2,7 @@
 <html lang="en">
 
 <head>
-  <meta charset="utf-8">
+  <meta charset="utf-8" />
   <title>Suck My PDF</title>
 
   <style>
@@ -75,15 +75,51 @@
       border: 1px solid #1e293b;
     }
 
+    /* GRID OUTPUT (3 per row) */
     #out {
       flex: 1;
       overflow-y: auto;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-content: flex-start;
     }
 
+    /* Each log block as a card */
     pre {
       margin: 0;
       white-space: pre-wrap;
       color: #00ff9c;
+
+      background: #020617;
+      border: 1px solid #1e293b;
+      border-radius: 10px;
+      padding: 12px;
+
+      box-sizing: border-box;
+      flex: 1 1 calc(33.333% - 10px);
+      min-width: 320px;
+    }
+
+    /* Batch header / single messages should span full width */
+    pre.full {
+      flex: 0 0 100%;
+      min-width: 100%;
+    }
+
+    /* 2 columns sooner (<= 1250px) */
+    @media (max-width: 1250px) {
+      pre {
+        flex: 1 1 calc(50% - 10px);
+      }
+    }
+
+    /* Optional: 1 column on small screens */
+    @media (max-width: 700px) {
+      pre {
+        flex: 1 1 100%;
+        min-width: 100%;
+      }
     }
   </style>
 </head>
@@ -94,8 +130,14 @@
       <div class="topbar">
         <div class="block">
           <div class="title">🔍 Check PDF</div>
-          <input id="checkFile" type="file" accept="application/pdf">
+          <input id="checkFile" type="file" accept="application/pdf" />
           <button id="checkBtn" onclick="checkPdf()">Check PDF</button>
+        </div>
+
+        <div class="block">
+          <div class="title">📦 Check PDFs (batch)</div>
+          <input id="checkFiles" type="file" accept="application/pdf" multiple />
+          <button id="batchBtn" onclick="checkPdfBatch()">Check Batch</button>
         </div>
       </div>
 
@@ -106,8 +148,9 @@
             Clear
           </button>
         </div>
+
         <div id="out">
-          <pre>...</pre>
+          <pre class="full">...</pre>
         </div>
       </div>
     </div>
@@ -115,7 +158,10 @@
 
   <script>
     const outEl = document.getElementById("out");
-    const btn = document.getElementById("checkBtn");
+    const BLUE = "#00e5ff";
+
+    const btnSingle = document.getElementById("checkBtn");
+    const btnBatch = document.getElementById("batchBtn");
 
     function escapeHtml(s) {
       return String(s ?? "")
@@ -125,20 +171,41 @@
     }
 
     function showPre(htmlInsidePre) {
-      outEl.innerHTML = `<pre>${htmlInsidePre}</pre>`;
+      outEl.innerHTML = "";
+      const pre = document.createElement("pre");
+      pre.className = "full";
+      pre.innerHTML = htmlInsidePre;
+      outEl.appendChild(pre);
+      outEl.scrollTop = outEl.scrollHeight;
+      return pre;
+    }
+
+    function appendPre(htmlInsidePre, fullWidth = false) {
+      const pre = document.createElement("pre");
+      if (fullWidth) pre.classList.add("full");
+      pre.innerHTML = htmlInsidePre;
+      outEl.appendChild(pre);
+      outEl.scrollTop = outEl.scrollHeight;
+      return pre;
     }
 
     function clearLog() {
       showPre("Cleared.");
     }
 
-    function colorForStatus(status) {
-      status = String(status ?? "").toLowerCase();
-      if (status === "unknown" || !status) return "#ffd166";
-      if (status === "pending") return "#ffd166";
-      if (status === "failed" || status === "canceled") return "#ff4d4d";
-      if (status === "completed") return "#00ffa6";
-      return "#ff4d4d";
+    function makeProcessingBlock(filename) {
+      return `⏳ Processing: ${escapeHtml(filename)}\n`;
+    }
+
+    // IBAN without spaces: TR410006400000114790226901
+    function formatIban(v) {
+      const raw = String(v ?? "").trim();
+      if (!raw) return raw;
+
+      const compact = raw.replace(/\s+/g, "").toUpperCase();
+      if (!compact.startsWith("TR") || compact.length < 10) return raw;
+
+      return compact;
     }
 
     function formatData(data) {
@@ -158,36 +225,30 @@
 
       const pad = 18;
 
-      // Strong highlight colors (easy to notice)
       const statusDisplay = (v) => {
         const raw = String(v ?? "");
         const st = raw.toLowerCase();
 
-        // Completed
-        if (st.includes("completed")) {
-          return { text: "✅", color: "#00ffa6" };
-        }
+        if (st.includes("completed")) return { text: "✅", color: "#00ffa6" };
 
-        // Unknown → show backend message, do NOT override
         if (!st || st.includes("unknown")) {
           return {
-            text: raw || "unknown — PDF does not state status; check manually (written in UI)",
-            color: "#ffd166"
+            text: raw || "unknown — PDF does not state status; check manually",
+            color: "#ffd166",
           };
         }
 
-        // Pending / canceled / others → show as-is
+        if (st.includes("pending")) return { text: raw, color: "#ffd166" };
+
         return { text: raw, color: "#ff4d4d" };
       };
 
-
-
       const valueColor = (k, v) => {
         if (k === "tr_status") return statusDisplay(v).color;
-        if (k === "receiver_name") return "#00e5ff";
-        if (k === "receiver_iban") return "#00e5ff";
-        if (k === "amount") return "#00e5ff";
-        if (k === "transaction_time") return "#00e5ff";
+        if (k === "receiver_name") return BLUE;
+        if (k === "receiver_iban") return BLUE;
+        if (k === "amount") return BLUE;
+        if (k === "transaction_time") return BLUE;
         return "#00ff9c";
       };
 
@@ -196,24 +257,39 @@
         if (!(k in data)) continue;
 
         const key = (k + "").padEnd(pad, " ");
-        const val = data[k];
+        let val = data[k];
 
-        let displayVal = val;
-        if (k === "tr_status") displayVal = statusDisplay(val).text;
+        if (k === "tr_status") {
+          val = statusDisplay(val).text;
+        }
 
-        const color = valueColor(k, val);
-        out += `${escapeHtml(key)}<span style="color:${color}">${escapeHtml(displayVal)}</span>
-`;
+        if (k === "receiver_iban") {
+          val = formatIban(val); // ✅ no spaces
+        }
+
+        const color = valueColor(k, data[k]);
+        out += `${escapeHtml(key)}<span style="color:${color}">${escapeHtml(val)}</span>\n`;
       }
+
       return out.trimEnd();
     }
 
+    function headerBlock(filename, detected) {
+      const bank = detected?.bank ?? "Unknown";
+      const variant = detected?.variant || "no variant";
+      return (
+        `FILE :  <span style="color:${BLUE}">${escapeHtml(filename)}</span>\n` +
+        `BANK: <span style="color:${BLUE}">${escapeHtml(bank)} (${escapeHtml(variant)})</span>\n\n`
+      );
+    }
+
     async function checkPdf() {
-      const f = document.getElementById("checkFile").files[0];
+      const f = document.getElementById("checkFile")?.files?.[0];
       if (!f) return showPre("❌ Pick PDF");
 
       showPre("⏳ Uploading...");
-      if (btn) btn.disabled = true;
+      if (btnSingle) btnSingle.disabled = true;
+      if (btnBatch) btnBatch.disabled = true;
 
       const fd = new FormData();
       fd.append("file", f);
@@ -222,18 +298,52 @@
         const r = await fetch("/check", { method: "POST", body: fd });
         const j = await r.json();
 
-        const head =
-          `✅ Uploaded: ${escapeHtml(f.name)}\n\n` +
-          `BANK: ${escapeHtml(j.detected?.bank)} (${escapeHtml(j.detected?.variant || "no variant")})\n` +
-          `METHOD: ${escapeHtml(j.detected?.method)}\n\n` +
-          `DATA:\n`;
-
-        showPre(head + formatData(j.data) + "\n");
-      } catch {
-        showPre("❌ Server error");
+        // Single result as one full-width block
+        showPre(headerBlock(f.name, j.detected) + formatData(j.data));
+      } catch (e) {
+        showPre(`❌ Error\n${escapeHtml(String(e))}\n`);
       } finally {
-        if (btn) btn.disabled = false;
+        if (btnSingle) btnSingle.disabled = false;
+        if (btnBatch) btnBatch.disabled = false;
       }
+    }
+
+    async function checkPdfBatch() {
+      const input = document.getElementById("checkFiles");
+      const files = Array.from(input?.files || []);
+      if (!files.length) return showPre("❌ Pick one or more PDFs");
+
+      // Clear previous log
+      outEl.innerHTML = "";
+
+      if (btnSingle) btnSingle.disabled = true;
+      if (btnBatch) btnBatch.disabled = true;
+
+      // Batch header (full width)
+      appendPre(`Batch selected: <span style="color:${BLUE}">${files.length}</span>\n\n`, true);
+
+      // Placeholders first
+      const blocks = files.map((f) => appendPre(makeProcessingBlock(f.name)));
+
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        const fd = new FormData();
+        fd.append("file", f);
+
+        try {
+          const r = await fetch("/check", { method: "POST", body: fd });
+          const j = await r.json();
+
+          blocks[i].innerHTML = headerBlock(f.name, j.detected) + formatData(j.data);
+        } catch (e) {
+          blocks[i].innerHTML = `❌ Error processing ${escapeHtml(f.name)}\n${escapeHtml(String(e))}\n`;
+        }
+
+        outEl.scrollTop = outEl.scrollHeight;
+      }
+
+      if (btnSingle) btnSingle.disabled = false;
+      if (btnBatch) btnBatch.disabled = false;
     }
   </script>
 </body>
