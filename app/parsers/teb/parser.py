@@ -12,7 +12,7 @@ def _extract_text(pdf_path: Path, max_pages: int = 2) -> str:
         parts.append(page.extract_text() or "")
     raw = "\n".join(parts)
     # normalize PDF weird spaces
-    return raw.replace("\u00A0", " ").replace("\u202F", " ")
+    return raw.replace("\u00a0", " ").replace("\u202f", " ")
 
 
 def _norm(s: str) -> str:
@@ -140,14 +140,19 @@ def _detect_status(raw: str) -> str:
     if re.search(r"\biptal\b|\biade\b|\bbasarisiz\b|\breddedildi\b|\bcancel", t):
         return "canceled"
 
-    if re.search(r"\bbeklemede\b|\bisleniyor\b|\bonay bekliyor\b|\bpending\b|\bprocessing\b", t):
+    if re.search(
+        r"\bbeklemede\b|\bisleniyor\b|\bonay bekliyor\b|\bpending\b|\bprocessing\b", t
+    ):
         return "pending"
 
     # TEB includes this -> treat as completed
-    if "elektronik olarak onaylanmıştır".casefold().replace("\u0307", "") in t or "elektronik olarak onaylanmis" in t:
+    if (
+        "elektronik olarak onaylanmıştır".casefold().replace("\u0307", "") in t
+        or "elektronik olarak onaylanmis" in t
+    ):
         return "completed"
 
-    return "unknown — PDF does not state status; check manually"
+    return "unknown-manually"
 
 
 def parse_teb(pdf_path: Path) -> Dict:

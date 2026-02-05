@@ -123,7 +123,7 @@ def _detect_status(raw: str) -> str:
         return "pending"
 
     # Default: unknown (Türkiye Finans does NOT confirm in your samples)
-    return "unknown — PDF does not state status; check manually"
+    return "unknown-manually"
 
 
 # ----------------------------

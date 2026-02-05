@@ -11,7 +11,7 @@ def _extract_text(pdf_path: Path, max_pages: int = 2) -> str:
     for page in reader.pages[:max_pages]:
         parts.append(page.extract_text() or "")
     raw = "\n".join(parts)
-    return raw.replace("\u00A0", " ").replace("\u202F", " ")
+    return raw.replace("\u00a0", " ").replace("\u202f", " ")
 
 
 def _norm(s: str) -> str:
@@ -98,7 +98,7 @@ def _detect_status(raw: str) -> str:
         return "pending"
 
     # This template doesn't explicitly say "successful/completed"
-    return "unknown — PDF does not state status; check manually"
+    return "unknown-manually"
 
 
 def parse_vakifkatilim(pdf_path: Path) -> Dict:

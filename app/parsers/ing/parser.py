@@ -180,7 +180,7 @@ def _detect_status(raw: str) -> str:
     ):
         return "completed"
 
-    return "unknown — PDF does not state status; check manually"
+    return "unknown-manually"
 
 
 # ----------------------------

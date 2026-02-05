@@ -15,7 +15,7 @@ def _extract_text(pdf_path: Path, max_pages: int = 2) -> str:
         parts.append(page.extract_text() or "")
     raw = "\n".join(parts)
 
-    raw = raw.replace("\u00A0", " ").replace("\u202F", " ")
+    raw = raw.replace("\u00a0", " ").replace("\u202f", " ")
     raw = unicodedata.normalize("NFC", raw)
     raw = raw.replace("I\u0307", "İ").replace("i\u0307", "i")
     return raw
@@ -70,9 +70,11 @@ def _detect_status(raw: str) -> str:
     t = (raw or "").casefold()
     if re.search(r"\biptal\b|\biade\b|\bbasarisiz\b|\breddedildi\b|\bcancel", t):
         return "canceled"
-    if re.search(r"\bbeklemede\b|\bisleniyor\b|\bonay bekliyor\b|\bpending\b|\bprocessing\b", t):
+    if re.search(
+        r"\bbeklemede\b|\bisleniyor\b|\bonay bekliyor\b|\bpending\b|\bprocessing\b", t
+    ):
         return "pending"
-    return "unknown — PDF does not state status; check manually"
+    return "unknown-manually"
 
 
 # ---------------------------

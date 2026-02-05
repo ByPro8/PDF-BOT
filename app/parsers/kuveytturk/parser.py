@@ -31,5 +31,5 @@ def parse_kuveyt_turk_unknown(pdf_path: Path) -> Dict:
         return best
 
     if not st or "unknown" in st:
-        best["tr_status"] = "unknown — PDF does not state status; check manually"
+        best["tr_status"] = "unknown-manually"
     return best

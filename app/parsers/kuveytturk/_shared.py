@@ -53,7 +53,9 @@ def _find_inline_after_label_strict(raw: str, labels: list[str]) -> Optional[str
       "Gönderilen IBAN" -> capturing "IBAN"
     """
     for lab in labels:
-        m = re.search(rf"(?:^|\n)\s*{re.escape(lab)}\s*[:\-]\s*([^\n]+)", raw, flags=re.I)
+        m = re.search(
+            rf"(?:^|\n)\s*{re.escape(lab)}\s*[:\-]\s*([^\n]+)", raw, flags=re.I
+        )
         if m:
             return _clean_one_line(m.group(1))
     return None
@@ -75,7 +77,11 @@ def _find_amount(raw: str) -> Optional[str]:
     if m:
         return f"{m.group(1)} {m.group(2).upper()}"
 
-    m2 = re.search(r"\b([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]{2})?)\s*(TRY|TL)\b", raw, flags=re.I)
+    m2 = re.search(
+        r"\b([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]{2})?)\s*(TRY|TL)\b",
+        raw,
+        flags=re.I,
+    )
     if m2:
         return f"{m2.group(1)} {m2.group(2).upper()}"
 
@@ -103,7 +109,9 @@ def _find_time(raw: str) -> Optional[str]:
         if m:
             v = m.group(1)
         else:
-            m2 = re.search(r"\b([0-9]{2}[./][0-9]{2}[./][0-9]{4})\s+([0-9]{2}:[0-9]{2})\b", raw)
+            m2 = re.search(
+                r"\b([0-9]{2}[./][0-9]{2}[./][0-9]{4})\s+([0-9]{2}:[0-9]{2})\b", raw
+            )
             if not m2:
                 return None
             v = f"{m2.group(1)} {m2.group(2)}"
@@ -117,12 +125,16 @@ def _find_time(raw: str) -> Optional[str]:
 
 
 def _find_receipt(raw: str) -> Optional[str]:
-    v = _find_line_after_label(raw, ["Query Number", "Sorgu Numarası", "Sorgu Numarasi"])
+    v = _find_line_after_label(
+        raw, ["Query Number", "Sorgu Numarası", "Sorgu Numarasi"]
+    )
     if v:
         m = re.search(r"\b(\d{6,})\b", v)
         return m.group(1) if m else v
 
-    v2 = _find_inline_after_label_strict(raw, ["Query Number", "Sorgu Numarası", "Sorgu Numarasi"])
+    v2 = _find_inline_after_label_strict(
+        raw, ["Query Number", "Sorgu Numarası", "Sorgu Numarasi"]
+    )
     if v2:
         m = re.search(r"\b(\d{6,})\b", v2)
         return m.group(1) if m else v2
@@ -134,7 +146,9 @@ def _find_ref(raw: str) -> Optional[str]:
     def pick_ref_token(txt: str) -> Optional[str]:
         if not txt:
             return None
-        m = re.search(r"\b(?=[A-Z0-9-]*\d)[A-Z0-9]{3,}(?:-[A-Z0-9]+)*\b", txt, flags=re.I)
+        m = re.search(
+            r"\b(?=[A-Z0-9-]*\d)[A-Z0-9]{3,}(?:-[A-Z0-9]+)*\b", txt, flags=re.I
+        )
         if m:
             return m.group(0)
         m2 = re.search(r"\b\d{8,}\b", txt)
@@ -188,18 +202,29 @@ def _detect_status_kuveytturk(raw: str) -> str:
     if re.search(r"\biptal\b|\biade\b|\bbasarisiz\b|\breddedildi\b|\bcancel", t):
         return "canceled"
 
-    if re.search(r"\bbeklemede\b|\bisleniyor\b|\bonay bekliyor\b|\bpending\b|\bprocessing\b", t):
+    if re.search(
+        r"\bbeklemede\b|\bisleniyor\b|\bonay bekliyor\b|\bpending\b|\bprocessing\b", t
+    ):
         return "pending"
 
-    if "isleminiz gerceklestirilmistir" in t or "transaction completed" in t or "successfully completed" in t:
+    if (
+        "isleminiz gerceklestirilmistir" in t
+        or "transaction completed" in t
+        or "successfully completed" in t
+    ):
         return "completed"
 
-    return "unknown — PDF does not state status; check manually"
+    return "unknown-manually"
 
 
 def _is_en_template(raw: str) -> bool:
     t = _norm(raw)
-    return ("transaction details" in t) or ("sender name" in t) or ("transactiondate" in t) or ("amount" in t)
+    return (
+        ("transaction details" in t)
+        or ("sender name" in t)
+        or ("transactiondate" in t)
+        or ("amount" in t)
+    )
 
 
 def _find_sender_en(raw: str) -> Optional[str]:
@@ -210,9 +235,13 @@ def _find_sender_en(raw: str) -> Optional[str]:
 
 
 def _find_receiver_en(raw: str) -> Optional[str]:
-    v = _find_line_after_label(raw, ["Recipient", "Recipient Name", "Beneficiary", "Receiver"])
+    v = _find_line_after_label(
+        raw, ["Recipient", "Recipient Name", "Beneficiary", "Receiver"]
+    )
     if not v:
-        v = _find_inline_after_label_strict(raw, ["Recipient", "Recipient Name", "Beneficiary", "Receiver"])
+        v = _find_inline_after_label_strict(
+            raw, ["Recipient", "Recipient Name", "Beneficiary", "Receiver"]
+        )
     return _clean_one_line(v)
 
 

@@ -48,19 +48,6 @@
       border-radius: 4px;
     }
 
-    .topbar button {
-      padding: 6px 12px;
-      background: #1d4ed8;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-
-    .topbar button:hover {
-      background: #2563eb;
-    }
-
     .terminal {
       flex: 1;
       min-height: 0;
@@ -99,12 +86,31 @@
       box-sizing: border-box;
       flex: 1 1 calc(33.333% - 10px);
       min-width: 320px;
+
+      cursor: pointer;
+      transition: border-color .12s ease, transform .12s ease, box-shadow .12s ease;
+      user-select: none;
     }
 
-    /* Batch header / single messages should span full width */
+    pre:hover {
+      border-color: #334155;
+      transform: translateY(-1px);
+      box-shadow: 0 0 0 1px rgba(51, 65, 85, .6), inset 0 0 8px rgba(0, 0, 0, .8);
+    }
+
+    /* Full-width blocks */
     pre.full {
       flex: 0 0 100%;
       min-width: 100%;
+      cursor: pointer;
+      /* single upload should open PDF too */
+      user-select: text;
+    }
+
+    pre.full:hover {
+      border-color: #334155;
+      transform: translateY(-1px);
+      box-shadow: 0 0 0 1px rgba(51, 65, 85, .6), inset 0 0 8px rgba(0, 0, 0, .8);
     }
 
     /* 2 columns sooner (<= 1250px) */
@@ -114,12 +120,64 @@
       }
     }
 
-    /* Optional: 1 column on small screens */
+    /* 1 column on small screens */
     @media (max-width: 700px) {
       pre {
         flex: 1 1 100%;
         min-width: 100%;
       }
+    }
+
+    /* IMPORTANT (blue) values: slightly bigger */
+    .imp {
+      color: #00e5ff;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+
+    /* Thin square save chip */
+    a.save-chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+
+      height: 18px;
+      padding: 0 8px;
+      margin-left: 10px;
+
+      border-radius: 4px;
+      border: 1px solid #1e293b;
+      background: #0b1220;
+
+      color: #00e5ff;
+      text-decoration: none;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .06em;
+
+      cursor: pointer;
+      user-select: none;
+
+      transform: translateY(-1px);
+      transition: transform .12s ease, background .12s ease, border-color .12s ease, box-shadow .12s ease;
+    }
+
+    a.save-chip:hover {
+      background: #0f1a2f;
+      border-color: #334155;
+      transform: translateY(-1px) scale(1.08);
+      box-shadow: 0 0 0 1px rgba(0, 229, 255, .18);
+    }
+
+    a.save-chip:active {
+      transform: translateY(-1px) scale(0.98);
+      box-shadow: none;
+    }
+
+    a.save-chip:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(0, 229, 255, .25);
     }
   </style>
 </head>
@@ -131,19 +189,17 @@
         <div class="block">
           <div class="title">🔍 Check PDF</div>
           <input id="checkFile" type="file" accept="application/pdf" />
-          <button id="checkBtn" onclick="checkPdf()">Check PDF</button>
         </div>
 
         <div class="block">
           <div class="title">📦 Check PDFs (batch)</div>
           <input id="checkFiles" type="file" accept="application/pdf" multiple />
-          <button id="batchBtn" onclick="checkPdfBatch()">Check Batch</button>
         </div>
       </div>
 
       <div class="terminal">
         <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-          <button onclick="clearLog()"
+          <button id="clearBtn"
             style="background:#374151;color:white;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:12px">
             Clear
           </button>
@@ -158,10 +214,6 @@
 
   <script>
     const outEl = document.getElementById("out");
-    const BLUE = "#00e5ff";
-
-    const btnSingle = document.getElementById("checkBtn");
-    const btnBatch = document.getElementById("batchBtn");
 
     function escapeHtml(s) {
       return String(s ?? "")
@@ -170,22 +222,47 @@
         .replaceAll(">", "&gt;");
     }
 
-    function showPre(htmlInsidePre) {
+    function openPdfUrl(url) {
+      if (!url) return;
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+
+    function showPre(htmlInsidePre, viewUrl = "", downloadUrl = "") {
       outEl.innerHTML = "";
       const pre = document.createElement("pre");
       pre.className = "full";
       pre.innerHTML = htmlInsidePre;
+
+      if (viewUrl) pre.dataset.viewUrl = viewUrl;
+      if (downloadUrl) pre.dataset.downloadUrl = downloadUrl;
+
+      pre.addEventListener("click", (e) => {
+        if (e.target && e.target.closest && e.target.closest("a.save-chip")) return;
+        openPdfUrl(pre.dataset.viewUrl);
+      });
+
       outEl.appendChild(pre);
       outEl.scrollTop = outEl.scrollHeight;
       return pre;
     }
 
-    function appendPre(htmlInsidePre, fullWidth = false) {
+    function appendPre(htmlInsidePre, fullWidth = false, viewUrl = "", downloadUrl = "") {
       const pre = document.createElement("pre");
       if (fullWidth) pre.classList.add("full");
       pre.innerHTML = htmlInsidePre;
+
+      if (viewUrl) pre.dataset.viewUrl = viewUrl;
+      if (downloadUrl) pre.dataset.downloadUrl = downloadUrl;
+
       outEl.appendChild(pre);
       outEl.scrollTop = outEl.scrollHeight;
+
+      // clickable cards
+      pre.addEventListener("click", (e) => {
+        if (e.target && e.target.closest && e.target.closest("a.save-chip")) return;
+        openPdfUrl(pre.dataset.viewUrl);
+      });
+
       return pre;
     }
 
@@ -197,7 +274,7 @@
       return `⏳ Processing: ${escapeHtml(filename)}\n`;
     }
 
-    // IBAN without spaces: TR410006400000114790226901
+    // IBAN without spaces
     function formatIban(v) {
       const raw = String(v ?? "").trim();
       if (!raw) return raw;
@@ -230,26 +307,22 @@
         const st = raw.toLowerCase();
 
         if (st.includes("completed")) return { text: "✅", color: "#00ffa6" };
-
-        if (!st || st.includes("unknown")) {
-          return {
-            text: raw || "unknown — PDF does not state status; check manually",
-            color: "#ffd166",
-          };
-        }
-
+        if (!st || st.includes("unknown")) return { text: raw || "unknown-manually", color: "#ffd166" };
         if (st.includes("pending")) return { text: raw, color: "#ffd166" };
-
         return { text: raw, color: "#ff4d4d" };
       };
 
-      const valueColor = (k, v) => {
-        if (k === "tr_status") return statusDisplay(v).color;
-        if (k === "receiver_name") return BLUE;
-        if (k === "receiver_iban") return BLUE;
-        if (k === "amount") return BLUE;
-        if (k === "transaction_time") return BLUE;
-        return "#00ff9c";
+      const valueWrap = (k, v) => {
+        if (k === "tr_status") {
+          const sd = statusDisplay(v);
+          return `<span style="color:${sd.color}">${escapeHtml(sd.text)}</span>`;
+        }
+
+        if (k === "receiver_name" || k === "receiver_iban" || k === "amount" || k === "transaction_time") {
+          return `<span class="imp">${escapeHtml(v)}</span>`;
+        }
+
+        return `<span style="color:#00ff9c">${escapeHtml(v)}</span>`;
       };
 
       let out = "";
@@ -259,37 +332,37 @@
         const key = (k + "").padEnd(pad, " ");
         let val = data[k];
 
-        if (k === "tr_status") {
-          val = statusDisplay(val).text;
-        }
+        if (k === "receiver_iban") val = formatIban(val);
 
-        if (k === "receiver_iban") {
-          val = formatIban(val); // ✅ no spaces
-        }
-
-        const color = valueColor(k, data[k]);
-        out += `${escapeHtml(key)}<span style="color:${color}">${escapeHtml(val)}</span>\n`;
+        out += `${escapeHtml(key)}${valueWrap(k, val)}\n`;
       }
 
       return out.trimEnd();
     }
 
-    function headerBlock(filename, detected) {
+    function saveChipHtml(downloadUrl) {
+      if (!downloadUrl) return "";
+      return `<a class="save-chip" href="${escapeHtml(downloadUrl)}" target="_blank" rel="noopener noreferrer">SAVE</a>`;
+    }
+
+    function headerBlock(filename, detected, downloadUrl) {
       const bank = detected?.bank ?? "Unknown";
       const variant = detected?.variant || "no variant";
+
       return (
-        `FILE :  <span style="color:${BLUE}">${escapeHtml(filename)}</span>\n` +
-        `BANK: <span style="color:${BLUE}">${escapeHtml(bank)} (${escapeHtml(variant)})</span>\n\n`
+        `FILE :  <span class="imp">${escapeHtml(filename)}</span>\n` +
+        `BANK: <span class="imp">${escapeHtml(bank)} (${escapeHtml(variant)})</span>` +
+        `${saveChipHtml(downloadUrl)}` +
+        `\n\n`
       );
     }
 
     async function checkPdf() {
-      const f = document.getElementById("checkFile")?.files?.[0];
-      if (!f) return showPre("❌ Pick PDF");
+      const input = document.getElementById("checkFile");
+      const f = input?.files?.[0];
+      if (!f) return;
 
       showPre("⏳ Uploading...");
-      if (btnSingle) btnSingle.disabled = true;
-      if (btnBatch) btnBatch.disabled = true;
 
       const fd = new FormData();
       fd.append("file", f);
@@ -298,32 +371,28 @@
         const r = await fetch("/check", { method: "POST", body: fd });
         const j = await r.json();
 
-        // Single result as one full-width block
-        showPre(headerBlock(f.name, j.detected) + formatData(j.data));
+        showPre(
+          headerBlock(f.name, j.detected, j.download_url || "") + formatData(j.data),
+          j.view_url || "",
+          j.download_url || ""
+        );
       } catch (e) {
         showPre(`❌ Error\n${escapeHtml(String(e))}\n`);
       } finally {
-        if (btnSingle) btnSingle.disabled = false;
-        if (btnBatch) btnBatch.disabled = false;
+        if (input) input.value = "";
       }
     }
 
     async function checkPdfBatch() {
       const input = document.getElementById("checkFiles");
       const files = Array.from(input?.files || []);
-      if (!files.length) return showPre("❌ Pick one or more PDFs");
+      if (!files.length) return;
 
-      // Clear previous log
       outEl.innerHTML = "";
 
-      if (btnSingle) btnSingle.disabled = true;
-      if (btnBatch) btnBatch.disabled = true;
+      appendPre(`Batch selected: <span class="imp">${files.length}</span>\n\n`, true);
 
-      // Batch header (full width)
-      appendPre(`Batch selected: <span style="color:${BLUE}">${files.length}</span>\n\n`, true);
-
-      // Placeholders first
-      const blocks = files.map((f) => appendPre(makeProcessingBlock(f.name)));
+      const blocks = files.map((f) => appendPre(makeProcessingBlock(f.name), false, "", ""));
 
       for (let i = 0; i < files.length; i++) {
         const f = files[i];
@@ -334,7 +403,9 @@
           const r = await fetch("/check", { method: "POST", body: fd });
           const j = await r.json();
 
-          blocks[i].innerHTML = headerBlock(f.name, j.detected) + formatData(j.data);
+          blocks[i].innerHTML = headerBlock(f.name, j.detected, j.download_url || "") + formatData(j.data);
+          blocks[i].dataset.viewUrl = j.view_url || "";
+          blocks[i].dataset.downloadUrl = j.download_url || "";
         } catch (e) {
           blocks[i].innerHTML = `❌ Error processing ${escapeHtml(f.name)}\n${escapeHtml(String(e))}\n`;
         }
@@ -342,9 +413,13 @@
         outEl.scrollTop = outEl.scrollHeight;
       }
 
-      if (btnSingle) btnSingle.disabled = false;
-      if (btnBatch) btnBatch.disabled = false;
+      if (input) input.value = "";
     }
+
+    // Auto-run on select (no buttons)
+    document.getElementById("checkFile")?.addEventListener("change", checkPdf);
+    document.getElementById("checkFiles")?.addEventListener("change", checkPdfBatch);
+    document.getElementById("clearBtn")?.addEventListener("click", clearLog);
   </script>
 </body>
 
