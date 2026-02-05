@@ -110,19 +110,24 @@ def is_kuveyt_turk_tr(text_norm: str) -> bool:
     )
 
 
-# TEXT-ANCHOR detector (Deniz PDFs don't include website domain)
 def is_denizbank(text_norm: str) -> bool:
-    # Strong anchors: "denizbank a.s." + "dekont fast"
     if "denizbank a.s." in text_norm and "dekont fast" in text_norm:
         return True
-    # Fallback: still very Deniz-specific
     return ("denizbank a.s." in text_norm) and ("mobildeniz" in text_norm or "fast sorgu numarasi" in text_norm)
+
+
+def is_akbank(text_norm: str) -> bool:
+    return has_domain(text_norm, "akbank.com") and ("akbank" in text_norm) and ("dekont" in text_norm)
 
 
 Detector = tuple[str, str, Optional[str], Callable[[str], bool]]
 
 DETECTORS: list[Detector] = [
     ("DENIZBANK", "DenizBank", None, is_denizbank),
+
+    ("AKBANK", "Akbank", None, is_akbank),
+    ("GARANTI", "Garanti", None, is_garanti),
+    ("ENPARA", "Enpara", None, is_enpara),
 
     ("PTTBANK", "PttBank", None, is_pttbank),
     ("HALKBANK", "Halkbank", None, is_halkbank),
@@ -133,12 +138,9 @@ DETECTORS: list[Detector] = [
     ("TEB", "TEB", None, is_teb),
     ("VAKIF_KATILIM", "VakifKatilim", None, is_vakif_katilim),
     ("VAKIFBANK", "VakifBank", None, is_vakifbank),
-    ("GARANTI", "Garanti", None, is_garanti),
-    ("ENPARA", "Enpara", None, is_enpara),
 
     ("KUVEYT_TURK_EN", "KuveytTurk", "EN", is_kuveyt_turk_en),
     ("KUVEYT_TURK_TR", "KuveytTurk", "TR", is_kuveyt_turk_tr),
-
     ("QNB", "QNB", None, is_qnb),
     ("KUVEYT_TURK", "KuveytTurk", "UNKNOWN", is_kuveyt_turk),
 ]
