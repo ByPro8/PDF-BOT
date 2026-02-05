@@ -112,13 +112,17 @@ def is_ziraat(text_norm: str) -> bool:
 def is_ziraat_fast(text_norm: str) -> bool:
     if not is_ziraat(text_norm):
         return False
-    return ("hesaptan fast" in text_norm) or ("fast mesaj kodu" in text_norm) or ("fast sorgu no" in text_norm)
+    return (
+        ("hesaptan fast" in text_norm)
+        or ("fast mesaj kodu" in text_norm)
+        or ("fast sorgu no" in text_norm)
+    )
 
 
 def is_ziraat_havale(text_norm: str) -> bool:
     if not is_ziraat(text_norm):
         return False
-    return ("hesaptan hesaba havale" in text_norm)
+    return "hesaptan hesaba havale" in text_norm
 
 
 def is_kuveyt_turk(text_norm: str) -> bool:
@@ -184,22 +188,17 @@ DETECTORS: list[Detector] = [
     ("TEB", "TEB", None, is_teb),
     ("VAKIF_KATILIM", "VakifKatilim", None, is_vakif_katilim),
     ("VAKIFBANK", "VakifBank", None, is_vakifbank),
-
     # YapıKredi variants
     ("YAPIKREDI_FAST", "YapiKredi", "FAST", is_yapikredi_fast),
     ("YAPIKREDI_HAVALE", "YapiKredi", "HAVALE", is_yapikredi_havale),
     ("YAPIKREDI", "YapiKredi", "UNKNOWN", is_yapikredi),
-
     # KuveytTurk variants
     ("KUVEYT_TURK_EN", "KuveytTurk", "EN", is_kuveyt_turk_en),
     ("KUVEYT_TURK_TR", "KuveytTurk", "TR", is_kuveyt_turk_tr),
-
     ("ZIRAAT_FAST", "Ziraat", "FAST", is_ziraat_fast),
     ("ZIRAAT_HAVALE", "Ziraat", "HAVALE", is_ziraat_havale),
     ("ZIRAAT", "Ziraat", "UNKNOWN", is_ziraat),
-
     ("QNB", "QNB", None, is_qnb),
-
     # Kuveyt fallback
     ("KUVEYT_TURK", "KuveytTurk", "UNKNOWN", is_kuveyt_turk),
 ]
@@ -228,7 +227,12 @@ def detect_bank_variant(pdf_path: Path, use_ocr_fallback: bool = False) -> dict:
     for key, bank_name, variant, pred in DETECTORS:
         try:
             if pred(text_norm):
-                return {"key": key, "bank": bank_name, "variant": variant, "method": method}
+                return {
+                    "key": key,
+                    "bank": bank_name,
+                    "variant": variant,
+                    "method": method,
+                }
         except Exception:
             continue
 
