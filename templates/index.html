@@ -6,6 +6,24 @@
   <title>Suck My PDF</title>
 
   <style>
+    :root {
+      /* ===== DEFAULT (professional, like your screenshot) ===== */
+      --c-key: #D1D5DB;
+      /* keys: tr_status, sender_name... */
+      --c-val: #D1D5DB;
+      /* normal values (same as keys) */
+      --c-imp: #60A5FA;
+      /* highlights: FILE/BANK + iban/amount/time */
+      --c-chip: #86EFAC;
+      /* SAVE */
+      --c-ok: #34D399;
+      /* ✅ */
+      --c-warn: #FBBF24;
+      /* unknown/pending */
+      --c-bad: #F87171;
+      /* bad/error */
+    }
+
     body {
       margin: 0;
       font-family: Arial, sans-serif;
@@ -33,10 +51,24 @@
       border-radius: 6px;
       padding: 8px;
       display: flex;
-      gap: 6px;
-      align-items: stretch;
+      gap: 10px;
+      align-items: flex-end;
       overflow-x: auto;
       border: 1px solid #1e293b;
+    }
+
+    .block {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 240px;
+    }
+
+    .title {
+      font-size: 12px;
+      opacity: .9;
+      color: #cbd5e1;
+      user-select: none;
     }
 
     .topbar input {
@@ -46,6 +78,31 @@
       color: #e5e7eb;
       border: 1px solid #1e293b;
       border-radius: 4px;
+    }
+
+    .topbar button {
+      padding: 6px 10px;
+      font-size: 13px;
+      background: #0b1220;
+      color: #e5e7eb;
+      border: 1px solid #1e293b;
+      border-radius: 6px;
+      cursor: pointer;
+      user-select: none;
+      transition: transform .12s ease, border-color .12s ease, background .12s ease;
+      white-space: nowrap;
+      height: 32px;
+      align-self: flex-end;
+    }
+
+    .topbar button:hover {
+      border-color: #334155;
+      background: #0f1a2f;
+      transform: translateY(-1px);
+    }
+
+    .topbar button:active {
+      transform: translateY(0);
     }
 
     .terminal {
@@ -62,7 +119,6 @@
       border: 1px solid #1e293b;
     }
 
-    /* GRID OUTPUT (3 per row) */
     #out {
       flex: 1;
       overflow-y: auto;
@@ -72,11 +128,10 @@
       align-content: flex-start;
     }
 
-    /* Each log block as a card */
     pre {
       margin: 0;
       white-space: pre-wrap;
-      color: #00ff9c;
+      color: var(--c-key);
 
       background: #020617;
       border: 1px solid #1e293b;
@@ -89,7 +144,7 @@
 
       cursor: default;
       transition: border-color .12s ease, transform .12s ease, box-shadow .12s ease;
-      user-select: text; /* allow selecting/copying without accidental open */
+      user-select: text;
     }
 
     pre:hover {
@@ -98,7 +153,6 @@
       box-shadow: 0 0 0 1px rgba(51, 65, 85, .6), inset 0 0 8px rgba(0, 0, 0, .8);
     }
 
-    /* Full-width blocks */
     pre.full {
       flex: 0 0 100%;
       min-width: 100%;
@@ -112,14 +166,12 @@
       box-shadow: 0 0 0 1px rgba(51, 65, 85, .6), inset 0 0 8px rgba(0, 0, 0, .8);
     }
 
-    /* 2 columns sooner (<= 1250px) */
     @media (max-width: 1250px) {
       pre {
         flex: 1 1 calc(50% - 10px);
       }
     }
 
-    /* 1 column on small screens */
     @media (max-width: 700px) {
       pre {
         flex: 1 1 100%;
@@ -127,15 +179,13 @@
       }
     }
 
-    /* IMPORTANT (blue) values: slightly bigger */
     .imp {
-      color: #00e5ff;
+      color: var(--c-imp);
       font-size: 15px;
       font-weight: 700;
       letter-spacing: 0.01em;
     }
 
-    /* Thin square save chip */
     a.save-chip {
       display: inline-flex;
       align-items: center;
@@ -149,7 +199,7 @@
       border: 1px solid #1e293b;
       background: #0b1220;
 
-      color: #00e5ff;
+      color: var(--c-chip);
       text-decoration: none;
       font-size: 11px;
       font-weight: 800;
@@ -165,8 +215,8 @@
     a.save-chip:hover {
       background: #0f1a2f;
       border-color: #334155;
-      transform: translateY(-1px) scale(1.08);
-      box-shadow: 0 0 0 1px rgba(0, 229, 255, .18);
+      transform: translateY(-1px) scale(1.06);
+      box-shadow: 0 0 0 1px rgba(51, 65, 85, .6);
     }
 
     a.save-chip:active {
@@ -176,7 +226,7 @@
 
     a.save-chip:focus-visible {
       outline: none;
-      box-shadow: 0 0 0 2px rgba(0, 229, 255, .25);
+      box-shadow: 0 0 0 2px rgba(51, 65, 85, .9);
     }
   </style>
 </head>
@@ -194,6 +244,8 @@
           <div class="title">📦 Check PDFs (batch)</div>
           <input id="checkFiles" type="file" accept="application/pdf" multiple />
         </div>
+
+        <button id="randomColorsBtn" title="Professional palette variations">🎨</button>
       </div>
 
       <div class="terminal">
@@ -227,23 +279,17 @@
     }
 
     function shouldIgnoreOpen(e) {
-      // allow clicking SAVE chip
       if (e.target && e.target.closest && e.target.closest("a.save-chip")) return true;
-
-      // if user is selecting text, do not open
       const sel = (window.getSelection && window.getSelection().toString().trim()) || "";
       if (sel) return true;
-
       return false;
     }
 
     function attachOpenHandlers(pre) {
-      // Single click does nothing (so you can select/copy safely)
       pre.addEventListener("click", (e) => {
         if (shouldIgnoreOpen(e)) return;
       });
 
-      // Double-click opens PDF
       pre.addEventListener("dblclick", (e) => {
         if (shouldIgnoreOpen(e)) return;
         openPdfUrl(pre.dataset.viewUrl);
@@ -278,7 +324,6 @@
       outEl.scrollTop = outEl.scrollHeight;
 
       attachOpenHandlers(pre);
-
       return pre;
     }
 
@@ -290,14 +335,12 @@
       return `⏳ Processing: ${escapeHtml(filename)}\n`;
     }
 
-    // IBAN without spaces
     function formatIban(v) {
       const raw = String(v ?? "").trim();
       if (!raw) return raw;
 
       const compact = raw.replace(/\s+/g, "").toUpperCase();
       if (!compact.startsWith("TR") || compact.length < 10) return raw;
-
       return compact;
     }
 
@@ -322,23 +365,27 @@
         const raw = String(v ?? "");
         const st = raw.toLowerCase();
 
-        if (st.includes("completed")) return { text: "✅", color: "#00ffa6" };
-        if (!st || st.includes("unknown")) return { text: raw || "unknown-manually", color: "#ffd166" };
-        if (st.includes("pending")) return { text: raw, color: "#ffd166" };
-        return { text: raw, color: "#ff4d4d" };
+        if (st.includes("completed")) return { text: "✅", color: "var(--c-ok)" };
+        if (!st || st.includes("unknown")) return { text: raw || "unknown-manually", color: "var(--c-warn)" };
+        if (st.includes("pending")) return { text: raw, color: "var(--c-warn)" };
+        return { text: raw, color: "var(--c-bad)" };
       };
 
       const valueWrap = (k, v) => {
+        // ONLY status gets ok/warn/bad colors
         if (k === "tr_status") {
           const sd = statusDisplay(v);
-          return `<span style="color:${sd.color}">${escapeHtml(sd.text)}</span>`;
+          return `<span style="color:${sd.color};font-weight:800">${escapeHtml(sd.text)}</span>`;
         }
 
+        // ONLY these get highlight color
         if (k === "receiver_name" || k === "receiver_iban" || k === "amount" || k === "transaction_time") {
           return `<span class="imp">${escapeHtml(v)}</span>`;
         }
 
-        return `<span style="color:#00ff9c">${escapeHtml(v)}</span>`;
+
+        // everything else stays neutral (same as keys)
+        return `<span style="color:var(--c-val)">${escapeHtml(v)}</span>`;
       };
 
       let out = "";
@@ -347,7 +394,6 @@
 
         const key = (k + "").padEnd(pad, " ");
         let val = data[k];
-
         if (k === "receiver_iban") val = formatIban(val);
 
         out += `${escapeHtml(key)}${valueWrap(k, val)}\n`;
@@ -405,7 +451,6 @@
       if (!files.length) return;
 
       outEl.innerHTML = "";
-
       appendPre(`Batch selected: <span class="imp">${files.length}</span>\n\n`, true);
 
       const blocks = files.map((f) => appendPre(makeProcessingBlock(f.name), false, "", ""));
@@ -436,6 +481,30 @@
     document.getElementById("checkFile")?.addEventListener("change", checkPdf);
     document.getElementById("checkFiles")?.addEventListener("change", checkPdfBatch);
     document.getElementById("clearBtn")?.addEventListener("click", clearLog);
+
+    // ===== Palette button (professional variations only) =====
+    const PRO_PALETTES = [
+      // Default (your screenshot vibe)
+      { "--c-key": "#D1D5DB", "--c-val": "#D1D5DB", "--c-imp": "#60A5FA", "--c-chip": "#86EFAC", "--c-ok": "#34D399", "--c-warn": "#FBBF24", "--c-bad": "#F87171" },
+      // Slightly cooler
+      { "--c-key": "#CBD5E1", "--c-val": "#CBD5E1", "--c-imp": "#93C5FD", "--c-chip": "#A7F3D0", "--c-ok": "#22C55E", "--c-warn": "#F59E0B", "--c-bad": "#EF4444" },
+      // More slate/enterprise
+      { "--c-key": "#D4D4D8", "--c-val": "#D4D4D8", "--c-imp": "#7DD3FC", "--c-chip": "#86EFAC", "--c-ok": "#34D399", "--c-warn": "#FCD34D", "--c-bad": "#FB7185" },
+      // Indigo accent
+      { "--c-key": "#E5E7EB", "--c-val": "#E5E7EB", "--c-imp": "#A5B4FC", "--c-chip": "#93C5FD", "--c-ok": "#10B981", "--c-warn": "#FBBF24", "--c-bad": "#F87171" },
+    ];
+
+    let paletteIndex = 0;
+
+    function applyPalette(pal) {
+      const root = document.documentElement;
+      for (const k of Object.keys(pal)) root.style.setProperty(k, pal[k]);
+    }
+
+    document.getElementById("randomColorsBtn")?.addEventListener("click", () => {
+      paletteIndex = (paletteIndex + 1) % PRO_PALETTES.length;
+      applyPalette(PRO_PALETTES[paletteIndex]);
+    });
   </script>
 </body>
 
