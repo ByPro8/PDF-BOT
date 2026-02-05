@@ -12,6 +12,7 @@ from app.parsers.teb.parser import parse_teb
 from app.parsers.vakifkatilim.parser import parse_vakifkatilim
 from app.parsers.vakifbank.parser import parse_vakifbank
 from app.parsers.garanti.parser import parse_garanti
+from app.parsers.enpara.parser import parse_enpara
 
 from app.parsers.kuveytturk.en.parser import parse_kuveyt_turk_en
 from app.parsers.kuveytturk.tr.parser import parse_kuveyt_turk_tr
@@ -32,6 +33,7 @@ PARSERS: dict[str, ParserFn] = {
     "VAKIF_KATILIM": parse_vakifkatilim,
     "VAKIFBANK": parse_vakifbank,
     "GARANTI": parse_garanti,
+    "ENPARA": parse_enpara,
 
     # KuveytTurk variants
     "KUVEYT_TURK_EN": parse_kuveyt_turk_en,
@@ -54,7 +56,5 @@ def parse_by_key(key: str, pdf_path: Path) -> Optional[Dict]:
             "receiver_iban": None,
             "amount": None,
             "transaction_time": None,
-            "receipt_no": None,
-            "transaction_ref": None,
             "error": f"{type(e).__name__}: {e}",
         }

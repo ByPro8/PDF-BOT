@@ -6,7 +6,6 @@ from pypdf import PdfReader
 
 
 def extract_text(pdf_path: Path, max_pages: int = 2) -> str:
-    """Fast text-layer extraction (first N pages)."""
     try:
         reader = PdfReader(str(pdf_path))
         parts: list[str] = []
@@ -18,7 +17,6 @@ def extract_text(pdf_path: Path, max_pages: int = 2) -> str:
 
 
 def normalize_text(text: str) -> str:
-    """Normalize for robust substring checks (TR letters + whitespace + dotted-i)."""
     t = (text or "").casefold().replace("\u0307", "")
     tr = str.maketrans({"ı": "i", "ö": "o", "ü": "u", "ş": "s", "ğ": "g", "ç": "c"})
     t = t.translate(tr)
@@ -27,11 +25,6 @@ def normalize_text(text: str) -> str:
 
 
 def has_domain(text_norm: str, domain: str) -> bool:
-    """
-    Website-only detection that survives PDF text-layer weirdness:
-    - spaces/newlines around dots
-    - split "www . domain . com . tr"
-    """
     t = text_norm or ""
     compact = re.sub(r"\s+", "", t)
 
@@ -48,9 +41,7 @@ def has_domain(text_norm: str, domain: str) -> bool:
     return re.search(pat, t, flags=re.I) is not None
 
 
-# ----------------------------
-# Bank detectors (WEBSITE-ONLY)
-# ----------------------------
+# WEBSITE-ONLY detectors
 def is_pttbank(text_norm: str) -> bool:
     return has_domain(text_norm, "pttbank.ptt.gov.tr")
 
@@ -66,16 +57,7 @@ def is_tombank(text_norm: str) -> bool:
 def is_isbank(text_norm: str) -> bool:
     if not has_domain(text_norm, "isbank.com.tr"):
         return False
-    return any(
-        k in text_norm
-        for k in [
-            "e-dekont",
-            "bilgi dekontu",
-            "iscep",
-            "musteri no",
-            "mușteri no",
-        ]
-    )
+    return any(k in text_norm for k in ["e-dekont", "bilgi dekontu", "iscep", "musteri no", "mușteri no"])
 
 
 def is_turkiye_finans(text_norm: str) -> bool:
@@ -102,6 +84,11 @@ def is_garanti(text_norm: str) -> bool:
     return has_domain(text_norm, "garantibbva.com.tr")
 
 
+def is_enpara(text_norm: str) -> bool:
+    # Enpara receipts show "www.enpara.com" / "Enpara.com Cep Şube"
+    return has_domain(text_norm, "enpara.com")
+
+
 def is_qnb(text_norm: str) -> bool:
     return has_domain(text_norm, "qnb.com.tr")
 
@@ -113,27 +100,14 @@ def is_kuveyt_turk(text_norm: str) -> bool:
 def is_kuveyt_turk_en(text_norm: str) -> bool:
     return has_domain(text_norm, "kuveytturk.com.tr") and any(
         k in text_norm
-        for k in [
-            "kuveyt turk participation bank",
-            "money transfer to iban",
-            "outgoing",
-            "transactiondate",
-            "query number",
-        ]
+        for k in ["kuveyt turk participation bank", "money transfer to iban", "outgoing", "transactiondate", "query number"]
     )
 
 
 def is_kuveyt_turk_tr(text_norm: str) -> bool:
     return has_domain(text_norm, "kuveytturk.com.tr") and any(
         k in text_norm
-        for k in [
-            "kuveyt turk katilim bankasi",
-            "iban'a para transferi",
-            "mobil sube",
-            "aciklama",
-            "sorgu numarasi",
-            "islem tarihi",
-        ]
+        for k in ["kuveyt turk katilim bankasi", "iban'a para transferi", "mobil sube", "aciklama", "sorgu numarasi", "islem tarihi"]
     )
 
 
@@ -149,8 +123,9 @@ DETECTORS: list[Detector] = [
     ("TEB", "TEB", None, is_teb),
     ("VAKIF_KATILIM", "VakifKatilim", None, is_vakif_katilim),
     ("VAKIFBANK", "VakifBank", None, is_vakifbank),
-
     ("GARANTI", "Garanti", None, is_garanti),
+
+    ("ENPARA", "Enpara", None, is_enpara),
 
     ("KUVEYT_TURK_EN", "KuveytTurk", "EN", is_kuveyt_turk_en),
     ("KUVEYT_TURK_TR", "KuveytTurk", "TR", is_kuveyt_turk_tr),
@@ -163,7 +138,6 @@ DETECTORS: list[Detector] = [
 def detect_bank_variant(pdf_path: Path, use_ocr_fallback: bool = False) -> dict:
     raw = extract_text(pdf_path, max_pages=2)
     text_norm = normalize_text(raw)
-
     method = "text"
 
     if (not text_norm) and use_ocr_fallback:
