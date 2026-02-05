@@ -308,7 +308,6 @@
       attachOpenHandlers(pre);
 
       outEl.appendChild(pre);
-      outEl.scrollTop = outEl.scrollHeight;
       return pre;
     }
 
@@ -321,7 +320,6 @@
       if (downloadUrl) pre.dataset.downloadUrl = downloadUrl;
 
       outEl.appendChild(pre);
-      outEl.scrollTop = outEl.scrollHeight;
 
       attachOpenHandlers(pre);
       return pre;
@@ -471,7 +469,6 @@
           blocks[i].innerHTML = `❌ Error processing ${escapeHtml(f.name)}\n${escapeHtml(String(e))}\n`;
         }
 
-        outEl.scrollTop = outEl.scrollHeight;
       }
 
       if (input) input.value = "";
