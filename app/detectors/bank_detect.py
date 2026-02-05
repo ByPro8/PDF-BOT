@@ -1,6 +1,6 @@
 import re
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Optional, Iterable, Dict, Tuple
 
 from pypdf import PdfReader
 
@@ -39,6 +39,7 @@ def has_domain(text_norm: str, domain: str) -> bool:
     if dom in t or dom in compact:
         return True
 
+    # Allow both with/without www.
     dom_no_www = dom.replace("www.", "")
     parts = [re.escape(p) for p in dom_no_www.split(".") if p]
     if not parts:
@@ -46,6 +47,27 @@ def has_domain(text_norm: str, domain: str) -> bool:
 
     pat = r"(?:www\s*\.\s*)?" + r"\s*\.\s*".join(parts)
     return re.search(pat, t, flags=re.I) is not None
+
+
+def ocr_first_page_text(pdf_path: Path) -> str:
+    """
+    OCR the first page ONLY.
+    NOTE: We will only call this for banks explicitly allowlisted for OCR-domain detection.
+    """
+    try:
+        from pdf2image import convert_from_path
+        import pytesseract
+    except Exception:
+        return ""
+
+    try:
+        images = convert_from_path(str(pdf_path), first_page=1, last_page=1)
+        if not images:
+            return ""
+        raw = pytesseract.image_to_string(images[0])
+        return raw or ""
+    except Exception:
+        return ""
 
 
 # ----------------------------
@@ -64,18 +86,11 @@ def is_tombank(text_norm: str) -> bool:
 
 
 def is_isbank(text_norm: str) -> bool:
-    # Website-only + extra markers to avoid collisions
     if not has_domain(text_norm, "isbank.com.tr"):
         return False
     return any(
         k in text_norm
-        for k in [
-            "e-dekont",
-            "bilgi dekontu",
-            "iscep",
-            "musteri no",
-            "mușteri no",
-        ]
+        for k in ["e-dekont", "bilgi dekontu", "iscep", "musteri no", "mușteri no"]
     )
 
 
@@ -103,18 +118,36 @@ def is_qnb(text_norm: str) -> bool:
     return has_domain(text_norm, "qnb.com.tr")
 
 
-def is_enpara(text_norm: str) -> bool:
-    return has_domain(text_norm, "enpara.com")
+def is_ziraat(text_norm: str) -> bool:
+    return has_domain(text_norm, "ziraatbank.com.tr")
+
+
+def is_kuveyt_turk(text_norm: str) -> bool:
+    return has_domain(text_norm, "kuveytturk.com.tr")
 
 
 def is_garanti(text_norm: str) -> bool:
     return has_domain(text_norm, "garantibbva.com.tr")
 
 
-def is_ziraat(text_norm: str) -> bool:
-    return has_domain(text_norm, "ziraatbank.com.tr")
+def is_enpara(text_norm: str) -> bool:
+    return has_domain(text_norm, "enpara.com")
 
 
+def is_akbank(text_norm: str) -> bool:
+    return has_domain(text_norm, "akbank.com")
+
+
+def is_denizbank(text_norm: str) -> bool:
+    # Keep it strict: only match Deniz domains
+    return has_domain(text_norm, "denizbank.com") or has_domain(
+        text_norm, "denizbank.com.tr"
+    )
+
+
+# ----------------------------
+# Ziraat variants
+# ----------------------------
 def is_ziraat_fast(text_norm: str) -> bool:
     if not is_ziraat(text_norm):
         return False
@@ -131,10 +164,9 @@ def is_ziraat_havale(text_norm: str) -> bool:
     return "hesaptan hesaba havale" in text_norm
 
 
-def is_kuveyt_turk(text_norm: str) -> bool:
-    return has_domain(text_norm, "kuveytturk.com.tr")
-
-
+# ----------------------------
+# KuveytTurk variants
+# ----------------------------
 def is_kuveyt_turk_en(text_norm: str) -> bool:
     return has_domain(text_norm, "kuveytturk.com.tr") and any(
         k in text_norm
@@ -163,7 +195,7 @@ def is_kuveyt_turk_tr(text_norm: str) -> bool:
 
 
 # ----------------------------
-# YapıKredi (variants)
+# YapıKredi variants
 # ----------------------------
 def is_yapikredi_fast(text_norm: str) -> bool:
     return has_domain(text_norm, "yapikredi.com.tr") and ("fast gonderimi" in text_norm)
@@ -183,7 +215,7 @@ def is_yapikredi(text_norm: str) -> bool:
 
 Detector = tuple[str, str, Optional[str], Callable[[str], bool]]
 
-# Order matters: variants before generic website checks
+# Order matters: variants before generic bank domain checks
 DETECTORS: list[Detector] = [
     ("PTTBANK", "PttBank", None, is_pttbank),
     ("HALKBANK", "Halkbank", None, is_halkbank),
@@ -204,14 +236,56 @@ DETECTORS: list[Detector] = [
     # Ziraat variants
     ("ZIRAAT_FAST", "Ziraat", "FAST", is_ziraat_fast),
     ("ZIRAAT_HAVALE", "Ziraat", "HAVALE", is_ziraat_havale),
+    # Bank-only (website-only)
+    ("GARANTI", "Garanti", None, is_garanti),
+    ("ENPARA", "Enpara", None, is_enpara),
+    ("AKBANK", "Akbank", None, is_akbank),
+    # If Deniz website exists in text-layer, detect it here (fast path).
+    ("DENIZBANK", "DenizBank", None, is_denizbank),
+    # keep Ziraat generic after variants
     ("ZIRAAT", "Ziraat", "UNKNOWN", is_ziraat),
     ("QNB", "QNB", None, is_qnb),
-    # Enpara + Garanti (website-only, single bank identity)
-    ("ENPARA", "Enpara", None, is_enpara),
-    ("GARANTI", "Garanti", None, is_garanti),
-    # Kuveyt fallback
     ("KUVEYT_TURK", "KuveytTurk", "UNKNOWN", is_kuveyt_turk),
 ]
+
+# -------------------------------------------------------------------
+# OCR DOMAIN ALLOWLIST (for "Deniz-like" banks)
+#
+# If a bank's website is usually image-only, add it here.
+# Detection is STILL "website-only": we OCR and then only search for domain(s).
+# -------------------------------------------------------------------
+# key -> (bank_name, variant, [domains...])
+OCR_DOMAIN_BANKS: Dict[str, Tuple[str, Optional[str], Tuple[str, ...]]] = {
+    "DENIZBANK": ("DenizBank", None, ("denizbank.com.tr", "denizbank.com")),
+    # Example for future:
+    # "SOME_BANK": ("SomeBank", None, ("somebank.com.tr", "somebank.com")),
+}
+
+
+def detect_by_ocr_domains(pdf_path: Path) -> Optional[dict]:
+    """
+    OCR first page and try to match ONLY allowlisted bank domains.
+    Returns detection dict if matched, else None.
+    """
+    if not OCR_DOMAIN_BANKS:
+        return None
+
+    ocr_raw = ocr_first_page_text(pdf_path)
+    if not ocr_raw:
+        return None
+
+    ocr_norm = normalize_text(ocr_raw)
+
+    for key, (bank_name, variant, domains) in OCR_DOMAIN_BANKS.items():
+        for dom in domains:
+            if has_domain(ocr_norm, dom):
+                return {
+                    "key": key,
+                    "bank": bank_name,
+                    "variant": variant,
+                    "method": "ocr",
+                }
+    return None
 
 
 def detect_bank_variant(pdf_path: Path, use_ocr_fallback: bool = False) -> dict:
@@ -219,19 +293,7 @@ def detect_bank_variant(pdf_path: Path, use_ocr_fallback: bool = False) -> dict:
     text_norm = normalize_text(raw)
     method = "text"
 
-    if (not text_norm) and use_ocr_fallback:
-        try:
-            from pdf2image import convert_from_path
-            import pytesseract
-
-            images = convert_from_path(str(pdf_path), first_page=1, last_page=1)
-            ocr_raw = pytesseract.image_to_string(images[0]) if images else ""
-            text_norm = normalize_text(ocr_raw)
-            method = "ocr" if text_norm else "none"
-        except Exception:
-            method = "none"
-            text_norm = ""
-
+    # 1) Text-layer website-only detection (strict + fast)
     for key, bank_name, variant, pred in DETECTORS:
         try:
             if pred(text_norm):
@@ -243,5 +305,28 @@ def detect_bank_variant(pdf_path: Path, use_ocr_fallback: bool = False) -> dict:
                 }
         except Exception:
             continue
+
+    # 2) OCR DOMAIN allowlist (still strict: website-only, but image-based)
+    ocr_hit = detect_by_ocr_domains(pdf_path)
+    if ocr_hit:
+        return ocr_hit
+
+    # 3) Optional generic OCR fallback (disabled by default)
+    # If you ever enable it, it will OCR and then run the same website-only rules for ALL banks.
+    if use_ocr_fallback:
+        ocr_raw = ocr_first_page_text(pdf_path)
+        ocr_norm = normalize_text(ocr_raw)
+        if ocr_norm:
+            for key, bank_name, variant, pred in DETECTORS:
+                try:
+                    if pred(ocr_norm):
+                        return {
+                            "key": key,
+                            "bank": bank_name,
+                            "variant": variant,
+                            "method": "ocr",
+                        }
+                except Exception:
+                    continue
 
     return {"key": "UNKNOWN", "bank": "Unknown", "variant": None, "method": method}
