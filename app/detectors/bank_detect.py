@@ -22,7 +22,6 @@ def normalize_text(text: str) -> str:
     t = (text or "").casefold().replace("\u0307", "")
     tr = str.maketrans({"ı": "i", "ö": "o", "ü": "u", "ş": "s", "ğ": "g", "ç": "c"})
     t = t.translate(tr)
-    # keep line breaks as spaces, but collapse repeated whitespace
     t = re.sub(r"\s+", " ", t)
     return t.strip()
 
@@ -40,7 +39,6 @@ def has_domain(text_norm: str, domain: str) -> bool:
     if dom in t or dom in compact:
         return True
 
-    # Build regex allowing whitespace around dots
     dom_no_www = dom.replace("www.", "")
     parts = [re.escape(p) for p in dom_no_www.split(".") if p]
     if not parts:
@@ -105,6 +103,14 @@ def is_qnb(text_norm: str) -> bool:
     return has_domain(text_norm, "qnb.com.tr")
 
 
+def is_enpara(text_norm: str) -> bool:
+    return has_domain(text_norm, "enpara.com")
+
+
+def is_garanti(text_norm: str) -> bool:
+    return has_domain(text_norm, "garantibbva.com.tr")
+
+
 def is_ziraat(text_norm: str) -> bool:
     return has_domain(text_norm, "ziraatbank.com.tr")
 
@@ -157,14 +163,6 @@ def is_kuveyt_turk_tr(text_norm: str) -> bool:
 
 
 # ----------------------------
-# Garanti (website-only)
-# ----------------------------
-def is_garanti(text_norm: str) -> bool:
-    # STRICT: only the website on the receipt
-    return has_domain(text_norm, "garantibbva.com.tr")
-
-
-# ----------------------------
 # YapıKredi (variants)
 # ----------------------------
 def is_yapikredi_fast(text_norm: str) -> bool:
@@ -185,7 +183,7 @@ def is_yapikredi(text_norm: str) -> bool:
 
 Detector = tuple[str, str, Optional[str], Callable[[str], bool]]
 
-# Order matters: put lookalikes/variants before generic website checks
+# Order matters: variants before generic website checks
 DETECTORS: list[Detector] = [
     ("PTTBANK", "PttBank", None, is_pttbank),
     ("HALKBANK", "Halkbank", None, is_halkbank),
@@ -196,8 +194,6 @@ DETECTORS: list[Detector] = [
     ("TEB", "TEB", None, is_teb),
     ("VAKIF_KATILIM", "VakifKatilim", None, is_vakif_katilim),
     ("VAKIFBANK", "VakifBank", None, is_vakifbank),
-    # Garanti (website-only)
-    ("GARANTI", "Garanti", None, is_garanti),
     # YapıKredi variants
     ("YAPIKREDI_FAST", "YapiKredi", "FAST", is_yapikredi_fast),
     ("YAPIKREDI_HAVALE", "YapiKredi", "HAVALE", is_yapikredi_havale),
@@ -205,10 +201,14 @@ DETECTORS: list[Detector] = [
     # KuveytTurk variants
     ("KUVEYT_TURK_EN", "KuveytTurk", "EN", is_kuveyt_turk_en),
     ("KUVEYT_TURK_TR", "KuveytTurk", "TR", is_kuveyt_turk_tr),
+    # Ziraat variants
     ("ZIRAAT_FAST", "Ziraat", "FAST", is_ziraat_fast),
     ("ZIRAAT_HAVALE", "Ziraat", "HAVALE", is_ziraat_havale),
     ("ZIRAAT", "Ziraat", "UNKNOWN", is_ziraat),
     ("QNB", "QNB", None, is_qnb),
+    # Enpara + Garanti (website-only, single bank identity)
+    ("ENPARA", "Enpara", None, is_enpara),
+    ("GARANTI", "Garanti", None, is_garanti),
     # Kuveyt fallback
     ("KUVEYT_TURK", "KuveytTurk", "UNKNOWN", is_kuveyt_turk),
 ]
@@ -217,10 +217,8 @@ DETECTORS: list[Detector] = [
 def detect_bank_variant(pdf_path: Path, use_ocr_fallback: bool = False) -> dict:
     raw = extract_text(pdf_path, max_pages=2)
     text_norm = normalize_text(raw)
-
     method = "text"
 
-    # Optional OCR fallback (if you ever enable it)
     if (not text_norm) and use_ocr_fallback:
         try:
             from pdf2image import convert_from_path
