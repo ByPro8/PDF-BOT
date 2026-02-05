@@ -87,9 +87,9 @@
       flex: 1 1 calc(33.333% - 10px);
       min-width: 320px;
 
-      cursor: pointer;
+      cursor: default;
       transition: border-color .12s ease, transform .12s ease, box-shadow .12s ease;
-      user-select: none;
+      user-select: text; /* allow selecting/copying without accidental open */
     }
 
     pre:hover {
@@ -102,8 +102,7 @@
     pre.full {
       flex: 0 0 100%;
       min-width: 100%;
-      cursor: pointer;
-      /* single upload should open PDF too */
+      cursor: default;
       user-select: text;
     }
 
@@ -227,6 +226,30 @@
       window.open(url, "_blank", "noopener,noreferrer");
     }
 
+    function shouldIgnoreOpen(e) {
+      // allow clicking SAVE chip
+      if (e.target && e.target.closest && e.target.closest("a.save-chip")) return true;
+
+      // if user is selecting text, do not open
+      const sel = (window.getSelection && window.getSelection().toString().trim()) || "";
+      if (sel) return true;
+
+      return false;
+    }
+
+    function attachOpenHandlers(pre) {
+      // Single click does nothing (so you can select/copy safely)
+      pre.addEventListener("click", (e) => {
+        if (shouldIgnoreOpen(e)) return;
+      });
+
+      // Double-click opens PDF
+      pre.addEventListener("dblclick", (e) => {
+        if (shouldIgnoreOpen(e)) return;
+        openPdfUrl(pre.dataset.viewUrl);
+      });
+    }
+
     function showPre(htmlInsidePre, viewUrl = "", downloadUrl = "") {
       outEl.innerHTML = "";
       const pre = document.createElement("pre");
@@ -236,10 +259,7 @@
       if (viewUrl) pre.dataset.viewUrl = viewUrl;
       if (downloadUrl) pre.dataset.downloadUrl = downloadUrl;
 
-      pre.addEventListener("click", (e) => {
-        if (e.target && e.target.closest && e.target.closest("a.save-chip")) return;
-        openPdfUrl(pre.dataset.viewUrl);
-      });
+      attachOpenHandlers(pre);
 
       outEl.appendChild(pre);
       outEl.scrollTop = outEl.scrollHeight;
@@ -257,11 +277,7 @@
       outEl.appendChild(pre);
       outEl.scrollTop = outEl.scrollHeight;
 
-      // clickable cards
-      pre.addEventListener("click", (e) => {
-        if (e.target && e.target.closest && e.target.closest("a.save-chip")) return;
-        openPdfUrl(pre.dataset.viewUrl);
-      });
+      attachOpenHandlers(pre);
 
       return pre;
     }
