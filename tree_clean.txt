@@ -1,0 +1,57 @@
+.
+├── app
+│   ├── detectors
+│   │   ├── __init__.py
+│   │   └── bank_detect.py
+│   ├── parsers
+│   │   ├── halkbank
+│   │   │   ├── __init__.py
+│   │   │   └── parser.py
+│   │   ├── ing
+│   │   │   ├── __init__.py
+│   │   │   └── parser.py
+│   │   ├── isbank
+│   │   │   ├── __init__.py
+│   │   │   └── parser.py
+│   │   ├── kuveytturk
+│   │   │   ├── en
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── parser.py
+│   │   │   ├── tr
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── parser.py
+│   │   │   ├── __init__.py
+│   │   │   ├── _shared.py
+│   │   │   └── parser.py
+│   │   ├── pttbank
+│   │   │   ├── __init__.py
+│   │   │   └── parser.py
+│   │   ├── qnb
+│   │   │   ├── __init__.py
+│   │   │   └── parser.py
+│   │   ├── teb
+│   │   │   ├── __init__.py
+│   │   │   └── parser.py
+│   │   ├── tombank
+│   │   │   ├── __init__.py
+│   │   │   └── parser.py
+│   │   ├── turkiyefinans
+│   │   │   ├── __init__.py
+│   │   │   └── parser.py
+│   │   ├── vakifbank
+│   │   │   ├── __init__.py
+│   │   │   └── parser.py
+│   │   ├── vakifkatilim
+│   │   │   ├── __init__.py
+│   │   │   └── parser.py
+│   │   ├── __init__.py
+│   │   └── registry.py
+│   └── __init__.py
+├── data
+├── templates
+│   └── index.html
+├── main.py
+├── requirements.txt
+└── tree_clean.txt
+
+19 directories, 36 files
