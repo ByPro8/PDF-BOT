@@ -13,6 +13,7 @@ from app.parsers.vakifkatilim.parser import parse_vakifkatilim
 from app.parsers.vakifbank.parser import parse_vakifbank
 from app.parsers.garanti.parser import parse_garanti
 from app.parsers.enpara.parser import parse_enpara
+from app.parsers.denizbank.parser import parse_denizbank
 
 from app.parsers.kuveytturk.en.parser import parse_kuveyt_turk_en
 from app.parsers.kuveytturk.tr.parser import parse_kuveyt_turk_tr
@@ -34,6 +35,7 @@ PARSERS: dict[str, ParserFn] = {
     "VAKIFBANK": parse_vakifbank,
     "GARANTI": parse_garanti,
     "ENPARA": parse_enpara,
+    "DENIZBANK": parse_denizbank,
 
     # KuveytTurk variants
     "KUVEYT_TURK_EN": parse_kuveyt_turk_en,
