@@ -11,6 +11,7 @@ from app.parsers.ing.parser import parse_ing
 from app.parsers.teb.parser import parse_teb
 from app.parsers.vakifkatilim.parser import parse_vakifkatilim
 from app.parsers.vakifbank.parser import parse_vakifbank
+from app.parsers.ziraat.parser import parse_ziraat
 
 from app.parsers.kuveytturk.en.parser import parse_kuveyt_turk_en
 from app.parsers.kuveytturk.tr.parser import parse_kuveyt_turk_tr
@@ -32,11 +33,11 @@ PARSERS: dict[str, ParserFn] = {
     "TEB": parse_teb,
     "VAKIF_KATILIM": parse_vakifkatilim,
     "VAKIFBANK": parse_vakifbank,
-
     # YapıKredi variants
     "YAPIKREDI_FAST": parse_yapikredi_fast,
     "YAPIKREDI_HAVALE": parse_yapikredi_havale,
-
+    "ZIRAAT_FAST": parse_ziraat,
+    "ZIRAAT_HAVALE": parse_ziraat,
     # KuveytTurk variants
     "KUVEYT_TURK_EN": parse_kuveyt_turk_en,
     "KUVEYT_TURK_TR": parse_kuveyt_turk_tr,

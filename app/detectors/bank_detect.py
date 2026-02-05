@@ -105,6 +105,22 @@ def is_qnb(text_norm: str) -> bool:
     return has_domain(text_norm, "qnb.com.tr")
 
 
+def is_ziraat(text_norm: str) -> bool:
+    return has_domain(text_norm, "ziraatbank.com.tr")
+
+
+def is_ziraat_fast(text_norm: str) -> bool:
+    if not is_ziraat(text_norm):
+        return False
+    return ("hesaptan fast" in text_norm) or ("fast mesaj kodu" in text_norm) or ("fast sorgu no" in text_norm)
+
+
+def is_ziraat_havale(text_norm: str) -> bool:
+    if not is_ziraat(text_norm):
+        return False
+    return ("hesaptan hesaba havale" in text_norm)
+
+
 def is_kuveyt_turk(text_norm: str) -> bool:
     return has_domain(text_norm, "kuveytturk.com.tr")
 
@@ -177,6 +193,10 @@ DETECTORS: list[Detector] = [
     # KuveytTurk variants
     ("KUVEYT_TURK_EN", "KuveytTurk", "EN", is_kuveyt_turk_en),
     ("KUVEYT_TURK_TR", "KuveytTurk", "TR", is_kuveyt_turk_tr),
+
+    ("ZIRAAT_FAST", "Ziraat", "FAST", is_ziraat_fast),
+    ("ZIRAAT_HAVALE", "Ziraat", "HAVALE", is_ziraat_havale),
+    ("ZIRAAT", "Ziraat", "UNKNOWN", is_ziraat),
 
     ("QNB", "QNB", None, is_qnb),
 

@@ -104,7 +104,7 @@ def _detect_status_tom(raw: str) -> str:
         return "⏳ pending"
 
     # TOM does not explicitly confirm completion
-    return "unknown — pdf does not state status, check manually"
+    return "unknown-manually"
 
 
 # ----------------------------
