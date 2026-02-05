@@ -157,6 +157,14 @@ def is_kuveyt_turk_tr(text_norm: str) -> bool:
 
 
 # ----------------------------
+# Garanti (website-only)
+# ----------------------------
+def is_garanti(text_norm: str) -> bool:
+    # STRICT: only the website on the receipt
+    return has_domain(text_norm, "garantibbva.com.tr")
+
+
+# ----------------------------
 # YapıKredi (variants)
 # ----------------------------
 def is_yapikredi_fast(text_norm: str) -> bool:
@@ -188,6 +196,8 @@ DETECTORS: list[Detector] = [
     ("TEB", "TEB", None, is_teb),
     ("VAKIF_KATILIM", "VakifKatilim", None, is_vakif_katilim),
     ("VAKIFBANK", "VakifBank", None, is_vakifbank),
+    # Garanti (website-only)
+    ("GARANTI", "Garanti", None, is_garanti),
     # YapıKredi variants
     ("YAPIKREDI_FAST", "YapiKredi", "FAST", is_yapikredi_fast),
     ("YAPIKREDI_HAVALE", "YapiKredi", "HAVALE", is_yapikredi_havale),
