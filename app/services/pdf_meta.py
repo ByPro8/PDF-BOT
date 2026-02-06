@@ -281,13 +281,48 @@ def _format_exiftool_grouped(raw: str, display_name: str, exif_ver: str) -> str:
 
 
 def _run_exiftool(pdf_path: Path, display_name: str) -> str:
+    # Priority:
+    # 1) bundled repo exiftool (perl script) via bin/exiftool/run_exiftool.sh
+    # 2) system exiftool if available
+    bundled = (
+        Path(__file__).resolve().parents[2] / "bin" / "exiftool" / "run_exiftool.sh"
+    )
+    if bundled.exists():
+        try:
+            proc = subprocess.run(
+                [str(bundled), "-a", "-G0:1", "-s", "-sort", str(pdf_path)],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            raw = proc.stdout or ""
+            if not raw.strip():
+                err = (proc.stderr or "").strip()
+                return f"ExifTool returned no output. {('ERR: ' + err) if err else ''}".strip()
+
+            # version
+            try:
+                pv = subprocess.run(
+                    [str(bundled), "-ver"], capture_output=True, text=True, timeout=6
+                )
+                ver = (pv.stdout or "").strip()
+            except Exception:
+                ver = ""
+
+            return _format_exiftool_grouped(
+                raw, display_name=display_name, exif_ver=ver
+            )
+
+        except subprocess.TimeoutExpired:
+            return "ExifTool timed out."
+        except Exception as e:
+            return f"ExifTool failed: {type(e).__name__}: {e}"
+
     exe = shutil.which("exiftool")
     if not exe:
-        return "ExifTool not available on server (exiftool not installed)."
+        return "ExifTool not available on server (not installed and no bundled exiftool found)."
 
     try:
-        # -G0:1 => [System]/[File]/[PDF]/[XMP-*]
-        # -a => duplicates; -s => short tag names; -sort => stable ordering
         proc = subprocess.run(
             [exe, "-a", "-G0:1", "-s", "-sort", str(pdf_path)],
             capture_output=True,
