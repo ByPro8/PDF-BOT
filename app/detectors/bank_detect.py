@@ -32,13 +32,7 @@ def normalize_text(text: str) -> str:
 
 
 def has_domain(text_norm: str, domain: str) -> bool:
-    """Website-domain matcher that survives PDF text-layer weirdness.
-
-    Handles:
-    - spaces/newlines around dots
-    - split 'www . domain . com . tr'
-    - URLs that include the domain
-    """
+    """Website-domain matcher that survives PDF text-layer weirdness."""
     t = text_norm or ""
     compact = re.sub(r"\s+", "", t)
 
@@ -49,7 +43,6 @@ def has_domain(text_norm: str, domain: str) -> bool:
     if dom in t or dom in compact:
         return True
 
-    # Allow both with/without www.
     dom_no_www = dom.replace("www.", "")
     parts = [re.escape(p) for p in dom_no_www.split(".") if p]
     if not parts:
@@ -65,12 +58,7 @@ def has_domain(text_norm: str, domain: str) -> bool:
 
 
 def ocr_first_page_text(pdf_path: Path) -> str:
-    """OCR the first page ONLY.
-
-    IMPORTANT:
-    - OCR is slow; we call it only when text-layer domain detection fails,
-      and only to confirm domains for OCR-allowlisted banks.
-    """
+    """OCR the first page ONLY (slow path)."""
     try:
         from pdf2image import convert_from_path
         import pytesseract
@@ -87,7 +75,7 @@ def ocr_first_page_text(pdf_path: Path) -> str:
 
 
 # =============================================================================
-# BANK DETECTION (STRICT: WEBSITE DOMAIN ONLY)
+# BANK DEFINITIONS
 # =============================================================================
 
 # key -> (bank_name, domains...)
@@ -111,22 +99,29 @@ BANK_DOMAINS: Dict[str, Tuple[str, Tuple[str, ...]]] = {
     "DENIZBANK": ("DenizBank", ("denizbank.com.tr", "denizbank.com")),
 }
 
-# -------------------------------------------------------------------------
-# OCR allowlist (EDIT THIS IN FUTURE)
-# Only these banks/domains are allowed to be detected via OCR.
-#
-# Example if later another bank sometimes has image-only domain:
-#   OCR_DOMAIN_BANKS["SOME_BANK"] = ("Some Bank", ("somebank.com.tr",))
-#
-# If a key is not in OCR_DOMAIN_BANKS, OCR can NEVER detect it.
-# -------------------------------------------------------------------------
+
+# OCR allowlist (only these may be detected by OCR)
 OCR_DOMAIN_BANKS: Dict[str, Tuple[str, Tuple[str, ...]]] = {
     "DENIZBANK": ("DenizBank", ("denizbank.com.tr", "denizbank.com")),
 }
 
 
+# ✅ DENIZ LEGAL NAME FALLBACK (REAL PDFs NEED THIS)
+DENIZ_TEXT_MARKERS = (
+    "denizbank a.s",
+    "denizbank a.ş",
+    "denizbank",
+    "mobildeniz",
+)
+
+
+# =============================================================================
+# BANK DETECTION
+# =============================================================================
+
+
 def _detect_bank_by_text_domains(text_norm: str) -> Optional[dict]:
-    """Detect bank strictly by website domain in text-layer (fast path)."""
+    """Detect bank by website domain (fast path)."""
     for key, (bank_name, domains) in BANK_DOMAINS.items():
         for dom in domains:
             if has_domain(text_norm, dom):
@@ -134,13 +129,25 @@ def _detect_bank_by_text_domains(text_norm: str) -> Optional[dict]:
                     "key": key,
                     "bank": bank_name,
                     "variant": None,
-                    "method": "text",
+                    "method": "text-domain",
                 }
     return None
 
 
+def _detect_deniz_by_text_name(text_norm: str) -> Optional[dict]:
+    """Detect Deniz by legal name (fallback)."""
+    if any(m in text_norm for m in DENIZ_TEXT_MARKERS):
+        return {
+            "key": "DENIZBANK",
+            "bank": "DenizBank",
+            "variant": None,
+            "method": "text-name",
+        }
+    return None
+
+
 def _detect_bank_by_ocr_domains(pdf_path: Path) -> Optional[dict]:
-    """OCR first page ONLY and detect ONLY banks in OCR_DOMAIN_BANKS by domain."""
+    """OCR first page and detect ONLY allowlisted banks."""
     raw = ocr_first_page_text(pdf_path)
     if not raw:
         return None
@@ -150,7 +157,12 @@ def _detect_bank_by_ocr_domains(pdf_path: Path) -> Optional[dict]:
     for key, (bank_name, domains) in OCR_DOMAIN_BANKS.items():
         for dom in domains:
             if has_domain(t, dom):
-                return {"key": key, "bank": bank_name, "variant": None, "method": "ocr"}
+                return {
+                    "key": key,
+                    "bank": bank_name,
+                    "variant": None,
+                    "method": "ocr-domain",
+                }
 
     return None
 
@@ -213,11 +225,20 @@ def _variant_garanti(text_norm: str) -> Tuple[str, str]:
     return "GARANTI", "UNKNOWN"
 
 
+def _variant_deniz(text_norm: str) -> Tuple[str, str]:
+    # ✅ IMPORTANT:
+    # Parser key must remain "DENIZBANK" because you don't have "DENIZBANK_FAST" registered.
+    if re.search(r"\bfast\b", text_norm):
+        return "DENIZBANK", "FAST"
+    return "DENIZBANK", "UNKNOWN"
+
+
 VARIANT_AFTER_BANK = {
     "ZIRAAT": _variant_ziraat,
     "YAPIKREDI": _variant_yapikredi,
     "KUVEYT_TURK": _variant_kuveytturk,
     "GARANTI": _variant_garanti,
+    "DENIZBANK": _variant_deniz,
 }
 
 
@@ -235,31 +256,29 @@ def _apply_variant(bank_key: str, text_norm: str) -> Tuple[str, Optional[str]]:
 
 
 def detect_bank_variant(pdf_path: Path, use_ocr_fallback: bool = False) -> dict:
-    """Detect bank strictly by website domain.
-
+    """
     Flow:
-      1) Extract text-layer (first 2 pages) and detect bank by website domain only.
-      2) If still unknown -> OCR FIRST PAGE ONLY and ONLY check OCR_DOMAIN_BANKS domains.
-      3) After bank is known -> detect variant for that bank.
-
-    NOTE:
-      `use_ocr_fallback` is kept for backward compatibility, but generic OCR
-      fallback is intentionally NOT used (OCR must not affect other banks).
+      1) Domain detection (all banks)
+      2) Deniz legal-name fallback
+      3) OCR allowlist (Deniz only)
+      4) Variant detection (but keep parser keys that exist)
     """
     raw = extract_text(pdf_path, max_pages=2)
     text_norm = normalize_text(raw)
 
     det = _detect_bank_by_text_domains(text_norm)
 
-    # OCR is expensive -> only do it when NO domain found in text-layer.
+    if not det:
+        det = _detect_deniz_by_text_name(text_norm)
+
     if not det:
         det = _detect_bank_by_ocr_domains(pdf_path)
 
     if not det:
-        return {"key": "UNKNOWN", "bank": "Unknown", "variant": None, "method": "text"}
+        return {"key": "UNKNOWN", "bank": "Unknown", "variant": None, "method": "none"}
 
-    base_bank_key = det["key"]
-    parser_key, variant = _apply_variant(base_bank_key, text_norm)
+    base_key = det["key"]
+    parser_key, variant = _apply_variant(base_key, text_norm)
 
     det["key"] = parser_key
     det["variant"] = variant
