@@ -3,7 +3,7 @@ import logging
 import time
 import secrets
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Tuple
 from html import escape
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
@@ -22,31 +22,31 @@ if not log.handlers:
     logging.basicConfig(level=logging.INFO)
 
 # -------------------------
-# PDF VIEW STORE (TEMP)
+# PDF VIEW STORE (DISK, MULTI-WORKER SAFE)
 # -------------------------
 PDF_STORE_DIR = Path(tempfile.gettempdir()) / "pdf_checker_store"
 PDF_STORE_DIR.mkdir(parents=True, exist_ok=True)
 
-# token -> (path, original_filename, created_ts)
-_PDF_INDEX: Dict[str, Tuple[Path, str, float]] = {}
 _PDF_TTL_SECONDS = 60 * 30  # 30 minutes
 
 
 def _cleanup_pdf_store() -> None:
+    """Delete stored PDFs older than TTL. Safe across multiple workers."""
     now = time.time()
-    dead = [
-        t for t, (_p, _name, ts) in _PDF_INDEX.items() if now - ts > _PDF_TTL_SECONDS
-    ]
-    for t in dead:
-        p, _name, _ts = _PDF_INDEX.pop(t, (None, None, None))
-        try:
-            if p and p.exists():
-                p.unlink()
-        except Exception:
-            pass
+    try:
+        for p in PDF_STORE_DIR.glob("*__*"):
+            try:
+                age = now - p.stat().st_mtime
+                if age > _PDF_TTL_SECONDS:
+                    p.unlink(missing_ok=True)
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 
 def _store_pdf_for_view(src_path: Path, original_name: str) -> str:
+    """Store PDF on disk with token prefix so any worker can serve it."""
     _cleanup_pdf_store()
 
     token = secrets.token_urlsafe(16)
@@ -58,18 +58,21 @@ def _store_pdf_for_view(src_path: Path, original_name: str) -> str:
     except Exception as e:
         raise RuntimeError(f"Could not store PDF: {type(e).__name__}: {e}")
 
-    _PDF_INDEX[token] = (dst, safe_name, time.time())
     return token
 
 
 def _get_pdf_by_token(token: str) -> Tuple[Path, str]:
+    """Resolve token -> file by scanning disk (works across workers)."""
     _cleanup_pdf_store()
-    item = _PDF_INDEX.get(token)
-    if not item:
+
+    matches = sorted(
+        PDF_STORE_DIR.glob(f"{token}__*"), key=lambda p: p.stat().st_mtime, reverse=True
+    )
+    if not matches:
         raise HTTPException(status_code=404, detail="PDF not found (expired)")
-    p, name, _ts = item
+    p = matches[0]
+    name = p.name.split("__", 1)[1] if "__" in p.name else "file.pdf"
     if not p.exists():
-        _PDF_INDEX.pop(token, None)
         raise HTTPException(status_code=404, detail="PDF file missing")
     return p, name
 
@@ -93,14 +96,15 @@ def home(request: Request):
 
 
 # -------------------------
-# PDF VIEW (HTML WRAPPER with correct tab title)
+# PDF VIEW (HTML WRAPPER so tab title = filename)
 # -------------------------
 @app.get("/pdf/{token}", response_class=HTMLResponse)
 def view_pdf(token: str):
     _p, name = _get_pdf_by_token(token)
 
-    # HTML wrapper so the browser tab title is the real filename (not the token).
     title = escape(name)
+    tok = escape(token)
+
     html = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -123,17 +127,14 @@ def view_pdf(token: str):
 <body>
   <div class="bar">
     <div style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{title}</div>
-    <a href="/pdf/{escape(token)}/download">Download</a>
+    <a href="/pdf/{tok}/download">Download</a>
   </div>
-  <iframe src="/pdf/{escape(token)}/raw" title="{title}"></iframe>
+  <iframe src="/pdf/{tok}/raw" title="{title}"></iframe>
 </body>
 </html>"""
     return HTMLResponse(content=html)
 
 
-# -------------------------
-# PDF RAW (actual PDF bytes)
-# -------------------------
 @app.get("/pdf/{token}/raw")
 def view_pdf_raw(token: str):
     p, name = _get_pdf_by_token(token)
@@ -145,9 +146,6 @@ def view_pdf_raw(token: str):
     )
 
 
-# -------------------------
-# Download PDF (ATTACHMENT)
-# -------------------------
 @app.get("/pdf/{token}/download")
 def download_pdf(token: str):
     p, name = _get_pdf_by_token(token)
@@ -176,19 +174,8 @@ async def check_pdf(file: UploadFile = File(...)):
             data = {"tr_status": "unknown"}
 
         token = _store_pdf_for_view(path, file.filename or "file.pdf")
-        view_url = f"/pdf/{token}"  # now opens HTML wrapper with correct title
+        view_url = f"/pdf/{token}"
         download_url = f"/pdf/{token}/download"
-
-        try:
-            log.info("---- UPLOAD ----")
-            log.info("file: %s", file.filename)
-            log.info("---- DETECTED ----")
-            log.info("key: %s", detected.get("key"))
-            log.info("bank: %s", detected.get("bank"))
-            log.info("variant: %s", detected.get("variant"))
-            log.info("method: %s", detected.get("method"))
-        except Exception:
-            pass
 
         return {
             "message": f"Uploaded: {file.filename}",
