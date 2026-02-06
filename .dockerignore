@@ -1,0 +1,12 @@
+.venv
+__pycache__
+*.pyc
+.DS_Store
+.git
+node_modules
+*.log
+*.pdf
+data/uploads
+pdf_checker_store
+uploads
+Uploads
