@@ -1,10 +1,10 @@
-import os
 import tempfile
 import logging
 import time
 import secrets
 from pathlib import Path
 from typing import Dict, Tuple
+from html import escape
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse
@@ -16,8 +16,6 @@ from app.parsers.registry import parse_by_key
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
-
-USE_OCR = os.getenv("USE_OCR", "0") == "1"
 
 log = logging.getLogger("pdf-checker")
 if not log.handlers:
@@ -31,7 +29,7 @@ PDF_STORE_DIR.mkdir(parents=True, exist_ok=True)
 
 # token -> (path, original_filename, created_ts)
 _PDF_INDEX: Dict[str, Tuple[Path, str, float]] = {}
-_PDF_TTL_SECONDS = 60 * 30  # keep for 30 minutes
+_PDF_TTL_SECONDS = 60 * 30  # 30 minutes
 
 
 def _cleanup_pdf_store() -> None:
@@ -55,10 +53,8 @@ def _store_pdf_for_view(src_path: Path, original_name: str) -> str:
     safe_name = (original_name or "file.pdf").replace("/", "_").replace("\\", "_")
     dst = PDF_STORE_DIR / f"{token}__{safe_name}"
 
-    # Move/copy temp file into store
     try:
-        data = src_path.read_bytes()
-        dst.write_bytes(data)
+        dst.write_bytes(src_path.read_bytes())
     except Exception as e:
         raise RuntimeError(f"Could not store PDF: {type(e).__name__}: {e}")
 
@@ -97,12 +93,50 @@ def home(request: Request):
 
 
 # -------------------------
-# View PDF (INLINE)
+# PDF VIEW (HTML WRAPPER with correct tab title)
 # -------------------------
-@app.get("/pdf/{token}")
+@app.get("/pdf/{token}", response_class=HTMLResponse)
 def view_pdf(token: str):
+    _p, name = _get_pdf_by_token(token)
+
+    # HTML wrapper so the browser tab title is the real filename (not the token).
+    title = escape(name)
+    html = f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{title}</title>
+  <style>
+    html, body {{ height: 100%; margin: 0; background: #0b1220; }}
+    .bar {{
+      height: 44px; display: flex; align-items: center; gap: 12px;
+      padding: 0 12px; box-sizing: border-box;
+      color: #e5e7eb; font-family: Arial, sans-serif; font-size: 14px;
+      background: #020617; border-bottom: 1px solid rgba(255,255,255,0.08);
+    }}
+    .bar a {{ color: #93c5fd; text-decoration: none; }}
+    .bar a:hover {{ text-decoration: underline; }}
+    iframe {{ width: 100%; height: calc(100% - 44px); border: 0; background: #0b1220; }}
+  </style>
+</head>
+<body>
+  <div class="bar">
+    <div style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{title}</div>
+    <a href="/pdf/{escape(token)}/download">Download</a>
+  </div>
+  <iframe src="/pdf/{escape(token)}/raw" title="{title}"></iframe>
+</body>
+</html>"""
+    return HTMLResponse(content=html)
+
+
+# -------------------------
+# PDF RAW (actual PDF bytes)
+# -------------------------
+@app.get("/pdf/{token}/raw")
+def view_pdf_raw(token: str):
     p, name = _get_pdf_by_token(token)
-    # IMPORTANT: inline so browser opens it instead of download prompt
     return FileResponse(
         path=str(p),
         media_type="application/pdf",
@@ -129,7 +163,7 @@ def download_pdf(token: str):
 async def check_pdf(file: UploadFile = File(...)):
     path = save_temp(file)
     try:
-        detected = detect_bank_variant(path, use_ocr_fallback=USE_OCR)
+        detected = detect_bank_variant(path)
 
         try:
             data = parse_by_key(detected["key"], path)
@@ -141,12 +175,10 @@ async def check_pdf(file: UploadFile = File(...)):
         else:
             data = {"tr_status": "unknown"}
 
-        # Store for view/download BEFORE deleting temp
         token = _store_pdf_for_view(path, file.filename or "file.pdf")
-        view_url = f"/pdf/{token}"
+        view_url = f"/pdf/{token}"  # now opens HTML wrapper with correct title
         download_url = f"/pdf/{token}/download"
 
-        # terminal log
         try:
             log.info("---- UPLOAD ----")
             log.info("file: %s", file.filename)
@@ -155,21 +187,6 @@ async def check_pdf(file: UploadFile = File(...)):
             log.info("bank: %s", detected.get("bank"))
             log.info("variant: %s", detected.get("variant"))
             log.info("method: %s", detected.get("method"))
-            log.info("---- DATA ----")
-            if isinstance(data, dict) and data is not None:
-                for k in [
-                    "tr_status",
-                    "sender_name",
-                    "receiver_name",
-                    "receiver_iban",
-                    "amount",
-                    "transaction_time",
-                    "receipt_no",
-                    "transaction_ref",
-                    "error",
-                ]:
-                    if k in data:
-                        log.info("%s: %s", k, data.get(k))
         except Exception:
             pass
 
@@ -188,7 +205,6 @@ async def check_pdf(file: UploadFile = File(...)):
             "error": f"{type(e).__name__}: {e}",
         }
     finally:
-        # Delete only the temp upload. Stored copy remains in PDF_STORE_DIR.
         try:
             path.unlink(missing_ok=True)
         except Exception:
