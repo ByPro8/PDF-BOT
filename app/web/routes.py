@@ -6,6 +6,7 @@ from starlette.requests import Request
 
 from app.detectors.bank_detect import detect_bank_variant
 from app.parsers.registry import parse_by_key
+from app.services.pdf_meta import extract_metadata_logs
 from app.services.pdf_store import get_pdf_by_token, store_pdf_for_view
 from app.services.pdf_view import build_pdf_wrapper_html
 from app.services.upload import save_upload_to_temp
@@ -65,11 +66,15 @@ def check_pdf(file: UploadFile = File(...)):
         else:
             data = {"tr_status": "unknown"}
 
+        # NEW: metadata logs (Python + ExifTool if installed)
+        meta = extract_metadata_logs(path, display_name=file.filename or "file.pdf")
+
         token = store_pdf_for_view(path, file.filename or "file.pdf")
         return {
             "message": f"Uploaded: {file.filename}",
             "detected": detected,
             "data": data,
+            "meta": meta,  # NEW
             "view_url": f"/pdf/{token}",
             "download_url": f"/pdf/{token}/download",
         }

@@ -61,6 +61,7 @@ function appendPre(htmlInsidePre, fullWidth = false, viewUrl = "", downloadUrl =
 
 function clearLog() {
     showPre("Cleared.");
+    window.MetaPanel?.clear?.();
 }
 
 function makeProcessingBlock(filename) {
@@ -104,18 +105,15 @@ function formatData(data) {
     };
 
     const valueWrap = (k, v) => {
-        // ONLY status gets ok/warn/bad colors
         if (k === "tr_status") {
             const sd = statusDisplay(v);
             return `<span style="color:${sd.color};font-weight:800">${escapeHtml(sd.text)}</span>`;
         }
 
-        // ONLY these get highlight color
         if (k === "receiver_name" || k === "receiver_iban" || k === "amount" || k === "transaction_time") {
             return `<span class="imp">${escapeHtml(v)}</span>`;
         }
 
-        // everything else stays neutral (same as keys)
         return `<span style="color:var(--c-val)">${escapeHtml(v)}</span>`;
     };
 
@@ -156,6 +154,7 @@ async function checkPdf() {
     if (!f) return;
 
     showPre("⏳ Uploading...");
+    window.MetaPanel?.clear?.();
 
     const fd = new FormData();
     fd.append("file", f);
@@ -169,8 +168,11 @@ async function checkPdf() {
             j.view_url || "",
             j.download_url || ""
         );
+
+        window.MetaPanel?.render?.(j.meta || null);
     } catch (e) {
         showPre(`❌ Error\n${escapeHtml(String(e))}\n`);
+        window.MetaPanel?.clear?.();
     } finally {
         if (input) input.value = "";
     }
@@ -182,6 +184,7 @@ async function checkPdfBatch() {
     if (!files.length) return;
 
     outEl.innerHTML = "";
+    window.MetaPanel?.clear?.(); // no meta in batch for now
     appendPre(`Batch selected: <span class="imp">${files.length}</span>\n\n`, true);
 
     const blocks = files.map((f) => appendPre(makeProcessingBlock(f.name), false, "", ""));
@@ -206,20 +209,15 @@ async function checkPdfBatch() {
     if (input) input.value = "";
 }
 
-// Auto-run on select (no buttons)
 document.getElementById("checkFile")?.addEventListener("change", checkPdf);
 document.getElementById("checkFiles")?.addEventListener("change", checkPdfBatch);
 document.getElementById("clearBtn")?.addEventListener("click", clearLog);
 
 // ===== Palette button (professional variations only) =====
 const PRO_PALETTES = [
-    // Default (your screenshot vibe)
     { "--c-key": "#D1D5DB", "--c-val": "#D1D5DB", "--c-imp": "#60A5FA", "--c-chip": "#86EFAC", "--c-ok": "#34D399", "--c-warn": "#FBBF24", "--c-bad": "#F87171" },
-    // Slightly cooler
     { "--c-key": "#CBD5E1", "--c-val": "#CBD5E1", "--c-imp": "#93C5FD", "--c-chip": "#A7F3D0", "--c-ok": "#22C55E", "--c-warn": "#F59E0B", "--c-bad": "#EF4444" },
-    // More slate/enterprise
     { "--c-key": "#D4D4D8", "--c-val": "#D4D4D8", "--c-imp": "#7DD3FC", "--c-chip": "#86EFAC", "--c-ok": "#34D399", "--c-warn": "#FCD34D", "--c-bad": "#FB7185" },
-    // Indigo accent
     { "--c-key": "#E5E7EB", "--c-val": "#E5E7EB", "--c-imp": "#A5B4FC", "--c-chip": "#93C5FD", "--c-ok": "#10B981", "--c-warn": "#FBBF24", "--c-bad": "#F87171" },
 ];
 
