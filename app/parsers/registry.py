@@ -33,6 +33,13 @@ from app.parsers.yapikredi.parser import (
 from app.parsers.ziraat.parser import parse_ziraat
 from app.parsers.kuveytturk.parser import parse_kuveyt_turk_unknown
 
+# ✅ NEW
+from app.parsers.upt.parser import parse_upt
+from app.parsers.fibabanka.parser import parse_fibabanka
+from app.parsers.ziraatkatilim.parser import parse_ziraatkatilim
+from app.parsers.albaraka.parser import parse_albaraka
+
+
 ParserFn = Callable[[Path], dict]
 
 REGISTRY: Dict[str, ParserFn] = {
@@ -40,28 +47,23 @@ REGISTRY: Dict[str, ParserFn] = {
     "GARANTI": parse_garanti,
     "GARANTI_FAST": parse_garanti,
     "GARANTI_HAVALE": parse_garanti,
-
     # Enpara / Akbank / DenizBank
     "ENPARA": parse_enpara,
     "AKBANK": parse_akbank,
     "DENIZBANK": parse_denizbank,
-
     # Yapı Kredi (keep variant keys as aliases too)
     "YAPIKREDI": parse_yapikredi,
     "YAPIKREDI_FAST": parse_yapikredi_fast,
     "YAPIKREDI_HAVALE": parse_yapikredi_havale,
-
     # Kuveyt Türk (accept all detector keys)
     "KuveytTurk": parse_kuveyt_turk_unknown,
     "KUVEYT_TURK": parse_kuveyt_turk_unknown,
     "KUVEYT_TURK_EN": parse_kuveyt_turk_unknown,
     "KUVEYT_TURK_TR": parse_kuveyt_turk_unknown,
-
     # Ziraat (accept all detector keys)
     "ZIRAAT": parse_ziraat,
     "ZIRAAT_FAST": parse_ziraat,
     "ZIRAAT_HAVALE": parse_ziraat,
-
     # Other banks (accept all detector keys)
     "ISBANK": parse_isbank,
     "TOM": parse_tombank,
@@ -77,7 +79,13 @@ REGISTRY: Dict[str, ParserFn] = {
     "HALKBANK": parse_halkbank,
     "ING": parse_ing,
     "QNB": parse_qnb,
+    # ✅ NEW BANKS
+    "UPT": parse_upt,
+    "FIBABANKA": parse_fibabanka,
+    "ZIRAATKATILIM": parse_ziraatkatilim,
+    "ALBARAKA": parse_albaraka,
 }
+
 
 def parse_by_key(key: str, pdf_path: Path) -> Optional[dict]:
     fn = REGISTRY.get(key)

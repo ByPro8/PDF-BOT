@@ -68,11 +68,36 @@ def _detect_tr_status(raw: str) -> str:
     return "unknown"
 
 
+def _last_datetime(raw: str) -> Optional[str]:
+    # Akbank sometimes prints the datetime later as ": 28.12.2025 10:08:55"
+    hits = re.findall(
+        r"([0-9]{2}\.[0-9]{2}\.[0-9]{4}\s+[0-9]{2}:[0-9]{2}:[0-9]{2})", raw
+    )
+    return hits[-1] if hits else None
+
+
+def _pick_receiver_iban(raw: str, sender_iban: Optional[str]) -> Optional[str]:
+    # Collect all IBAN-like strings and choose the one != sender_iban
+    ibans = re.findall(r"(TR[0-9][0-9\s]{18,})", raw, flags=re.IGNORECASE)
+    ibans = [_iban_compact(_clean(x)) for x in ibans]
+    ibans = [x for x in ibans if x and len(x) >= 26]  # TR + 24 chars
+
+    sender_iban_c = _iban_compact(sender_iban) if sender_iban else None
+
+    # Prefer an IBAN that is not the sender's
+    for ib in ibans:
+        if sender_iban_c and ib == sender_iban_c:
+            continue
+        return ib
+
+    # If only one exists, return it
+    return ibans[0] if ibans else None
+
+
 def parse_akbank(pdf_path: Path) -> Dict:
     raw = _extract_text(pdf_path, max_pages=2)
 
     # Akbank puts BOTH "Adı Soyadı/Unvan :" on the same line.
-    # Capture each name separately (non-greedy, stop before next label).
     names = re.findall(
         r"Adı\s+Soyadı/Unvan\s*:\s*(.+?)(?=\s+Adı\s+Soyadı/Unvan\s*:|\n|$)",
         raw,
@@ -83,22 +108,26 @@ def parse_akbank(pdf_path: Path) -> Dict:
     sender_name = names[0] if len(names) >= 1 else None
     receiver_name = names[1] if len(names) >= 2 else None
 
-    receiver_iban = _find(raw, r"Alacaklı\s+Hesap\s+No\s*:\s*(TR[0-9\s]{20,})")
-    receiver_iban = _iban_compact(receiver_iban)
-
     # Sender IBAN is a standalone TR... line in your PDFs
     sender_iban = _find(raw, r"\n(TR[0-9\s]{20,})\n")
     sender_iban = _iban_compact(sender_iban)
 
+    # Receiver IBAN varies by layout; pick from all IBANs that aren't sender
+    receiver_iban = _pick_receiver_iban(raw, sender_iban)
+
     amount = _pick_transfer_amount(raw)
 
+    # Old strict pattern (kept), but add fallback to last datetime anywhere
     transaction_time = _find(
         raw,
         r"İşlem\s+Tarihi/Saati\s*:\s*([0-9]{2}\.[0-9]{2}\.[0-9]{4}\s+[0-9]{2}:[0-9]{2}:[0-9]{2})",
-    )
+    ) or _last_datetime(raw)
 
-    # This appears as: "30940173 / 458578 /"
+    # This appears as: "38077981 / 219619 /"
     receipt_no = _find(raw, r"([0-9]{5,}\s*/\s*[0-9]{3,}\s*/)")
+
+    # "Referans :" is often blank in this layout, so keep None unless found
+    transaction_ref = _find(raw, r"Referans\s*:\s*([A-Z0-9\-\/]+)")
 
     return {
         "tr_status": _detect_tr_status(raw),
@@ -109,5 +138,5 @@ def parse_akbank(pdf_path: Path) -> Dict:
         "amount": amount,
         "transaction_time": transaction_time,
         "receipt_no": receipt_no,
-        "transaction_ref": None,
+        "transaction_ref": transaction_ref,
     }

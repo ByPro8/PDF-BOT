@@ -1,6 +1,6 @@
 import re
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Dict, Optional
 
 from pypdf import PdfReader
 
@@ -13,52 +13,46 @@ def _extract_text(pdf_path: Path, max_pages: int = 2) -> str:
     return "\n".join(parts)
 
 
-def _clean_spaces(s: str) -> str:
-    return re.sub(r"\s+", " ", s).strip()
-
-
-def _norm(s: str) -> str:
+def _clean(s: Optional[str]) -> Optional[str]:
     if not s:
-        return ""
-    s = s.casefold().replace("\u0307", "")
-    tr_map = str.maketrans({"ı": "i", "ö": "o", "ü": "u", "ş": "s", "ğ": "g", "ç": "c"})
-    s = s.translate(tr_map)
-    s = re.sub(r"\s+", " ", s)
-    return s.strip()
-
-
-def _find_group(text: str, pattern: str) -> Optional[str]:
-    m = re.search(pattern, text, flags=re.IGNORECASE)
-    if not m:
         return None
-    return _clean_spaces(m.group(1))
+    s = re.sub(r"\s+", " ", s).strip()
+    return s or None
 
 
-def _find_iban_after(text: str, label_pattern: str) -> Optional[str]:
-    m = re.search(label_pattern + r"\s*(TR(?:\s*\d){24})", text, flags=re.IGNORECASE)
-    if not m:
+def _iban_compact(s: Optional[str]) -> Optional[str]:
+    if not s:
         return None
-    iban = _clean_spaces(m.group(1))
-    digits = re.sub(r"\D", "", iban)
-    if len(digits) < 24:
-        return iban
-    digits = digits[:24]
-    return f"TR{digits[0:2]} {digits[2:6]} {digits[6:10]} {digits[10:14]} {digits[14:18]} {digits[18:22]} {digits[22:24]}"
+    s = re.sub(r"\s+", "", s).upper()
+    m = re.search(r"(TR[0-9]{24})", s)
+    return m.group(1) if m else None
 
 
-def _find_amount(text: str) -> Optional[str]:
-    m = re.search(r"EFT\s*TUTARI\s*:\s*([0-9\.,]+)\s*TL", text, flags=re.IGNORECASE)
-    if m:
-        return f"{m.group(1).strip()} TL"
-    m = re.search(r"\bTL\s+([0-9\.,]+)\b", text, flags=re.IGNORECASE)
-    if m:
-        return f"{m.group(1).strip()} TL"
+def _find_line_value(lines: list[str], prefix_regex: str) -> Optional[str]:
+    rx = re.compile(prefix_regex, flags=re.IGNORECASE)
+    for ln in lines:
+        m = rx.search(ln)
+        if m:
+            return _clean(m.group(1))
     return None
 
 
-def _find_datetime(text: str) -> Optional[str]:
-    d = re.search(r"\b(\d{2})/(\d{2})/(\d{4})\b", text)
-    t = re.search(r"\b(\d{2}):(\d{2})(?::\d{2})?\b", text)
+def _find_receipt_no_anywhere(raw: str) -> Optional[str]:
+    # Works for both PDFs:
+    # "Sıra No 00167-240000" :contentReference[oaicite:2]{index=2}
+    # "Sıra No 01164-450426" :contentReference[oaicite:3]{index=3}
+    m = re.search(r"Sıra\s+No\s+([0-9]{3,}-[0-9]{3,})", raw, flags=re.IGNORECASE)
+    return _clean(m.group(1)) if m else None
+
+
+def _find_tx_ref(raw: str) -> Optional[str]:
+    m = re.search(r"Fiş\s+No\s*:\s*([0-9]+)", raw, flags=re.IGNORECASE)
+    return _clean(m.group(1)) if m else None
+
+
+def _find_datetime(raw: str) -> Optional[str]:
+    d = re.search(r"\b(\d{2})/(\d{2})/(\d{4})\b", raw)
+    t = re.search(r"\b(\d{2}):(\d{2})(?::\d{2})?\b", raw)
     if not d or not t:
         return None
     dd, mm, yyyy = d.group(1), d.group(2), d.group(3)
@@ -66,54 +60,79 @@ def _find_datetime(text: str) -> Optional[str]:
     return f"{dd}.{mm}.{yyyy} {hh}:{mi}"
 
 
-def _detect_tr_status(raw_text: str) -> str:
-    t = _norm(raw_text)
+def _find_amount(raw: str) -> Optional[str]:
+    # In both PDFs: "... TL 11,630.00" or "... TL 30,350.00"
+    m = re.search(r"\bTL\s+([0-9\.,]+)", raw, flags=re.IGNORECASE)
+    if not m:
+        return None
+    amt = m.group(1).strip()
+    if amt.endswith(".00"):
+        amt = amt[:-3]
+    return f"{amt} TL"
 
-    # generic negative states
-    if re.search(r"\biptal\b|\biptal edildi\b|\bcancel", t):
+
+def _detect_tr_status(raw: str) -> str:
+    t = (raw or "").casefold().replace("\u0307", "")
+    tr = str.maketrans({"ı": "i", "ö": "o", "ü": "u", "ş": "s", "ğ": "g", "ç": "c"})
+    t = t.translate(tr)
+    if "iptal" in t:
         return "canceled"
-    if re.search(r"\bbasarisiz\b|\bhata\b|\breddedildi\b|\bfailed\b|\brejected\b", t):
-        return "failed"
-    if re.search(r"\bbeklemede\b|\bonay bekliyor\b|\bonayda\b|\baskida\b|\bisleniyor\b|\bpending\b|\bprocessing\b", t):
+    if "beklemede" in t or "isleniyor" in t:
         return "pending"
-
-    # QNB explicit completion phrase:
-    # "hareketler gerçekleştirilmiştir" -> normalized becomes "hareketler gerceklestirilmiştir"
-    # We match the stem to be robust to minor text differences.
-    if re.search(r"\bhareketler\s+gerceklestiril", t):
+    if "hareketler gerceklestirilmis" in t or "dekont" in t:
         return "completed"
-
     return "unknown"
 
 
 def parse_qnb(pdf_path: Path) -> Dict:
     raw = _extract_text(pdf_path, max_pages=2)
-    text = _clean_spaces(raw)
+    lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
 
-    receiver = _find_group(
-        text,
-        r"ALICI\s+ÜNVANI\s*:\s*(.*?)\s+ALICI\s+IBAN\s*:",
+    # ------------------------------------------------------------
+    # Layout A: HESAPTAN HESABA HAVALE (your 11,630 PDF)
+    # ------------------------------------------------------------
+    sender_name = _find_line_value(
+        lines,
+        r"^HAVALEY[İI]\s+G[ÖO]NDEREN\s+HESAP\s+UNVANI\s*:\s*(.+)$",
+    )
+    receiver_name = _find_line_value(
+        lines,
+        r"^HAVALEY[İI]\s+ALAN\s+MUSTERI\s+UNVANI\s*:\s*(.+)$",
     )
 
-    sender = _find_group(
-        text,
-        r"GÖNDEREN\s*:\s*(.*?)\s+AÇIKLAMA\s*:",
+    receiver_iban_raw = _find_line_value(
+        lines,
+        r"^HAVALEY[İI]\s+ALAN\s+HESAP\s+NO\s*:\s*\d+\s+IBAN\s*:\s*(TR.*)$",
     )
+    receiver_iban = _iban_compact(receiver_iban_raw)
 
-    receiver_iban = _find_iban_after(
-        text,
-        r"ALICI\s+IBAN\s*:\s*",
-    )
+    # ------------------------------------------------------------
+    # Layout B: GIDEN FAST EFT (your 30,350 PDF)
+    # ------------------------------------------------------------
+    if not receiver_name:
+        receiver_name = _find_line_value(
+            lines, r"^ALICI\s+ÜNVANI:\s*(.+?)\s+ALICI\s+IBAN:"
+        )
+    if not receiver_iban:
+        receiver_iban = _iban_compact(
+            _find_line_value(lines, r"^ALICI\s+ÜNVANI:.*?ALICI\s+IBAN:\s*(TR.*)$")
+        )
 
-    amount = _find_amount(text)
-    receipt_no = _find_group(text, r"SORGU\s+NO\s*:\s*(\d+)")
-    transaction_ref = _find_group(text, r"Fi[şs]\s+No\s*:\s*(\d+)")
-    transaction_time = _find_datetime(text)
+    if not sender_name:
+        # "GÖNDEREN: HAMZA GEZER AÇIKLAMA:..."
+        m = re.search(r"GÖNDEREN\s*:\s*([^\n]+)", raw, flags=re.IGNORECASE)
+        if m:
+            sender_name = _clean(m.group(1).split("AÇIKLAMA")[0])
+
+    amount = _find_amount(raw)
+    transaction_time = _find_datetime(raw)
+    receipt_no = _find_receipt_no_anywhere(raw)
+    transaction_ref = _find_tx_ref(raw)
 
     return {
         "tr_status": _detect_tr_status(raw),
-        "sender_name": sender,
-        "receiver_name": receiver,
+        "sender_name": sender_name,
+        "receiver_name": receiver_name,
         "receiver_iban": receiver_iban,
         "amount": amount,
         "transaction_time": transaction_time,

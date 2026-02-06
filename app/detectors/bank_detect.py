@@ -78,7 +78,6 @@ def ocr_first_page_text(pdf_path: Path) -> str:
 # BANK DEFINITIONS
 # =============================================================================
 
-# key -> (bank_name, domains...)
 BANK_DOMAINS: Dict[str, Tuple[str, Tuple[str, ...]]] = {
     "PTTBANK": ("PttBank", ("pttbank.ptt.gov.tr",)),
     "HALKBANK": ("Halkbank", ("halkbank.com.tr",)),
@@ -97,16 +96,23 @@ BANK_DOMAINS: Dict[str, Tuple[str, Tuple[str, ...]]] = {
     "AKBANK": ("Akbank", ("akbank.com",)),
     "YAPIKREDI": ("YapiKredi", ("yapikredi.com.tr",)),
     "DENIZBANK": ("DenizBank", ("denizbank.com.tr", "denizbank.com")),
+    # Added previously
+    "FIBABANKA": ("Fibabanka", ("fibabanka.com.tr",)),
+    "UPT": ("UPT", ("upt.com.tr", "uption.com.tr")),
+    "ZIRAATKATILIM": ("ZiraatKatilim", ("ziraatkatilim.com.tr",)),
+    # ✅ NEW
+    "ALBARAKA": ("Albaraka", ("albaraka.com.tr",)),
 }
-
 
 # OCR allowlist (only these may be detected by OCR)
 OCR_DOMAIN_BANKS: Dict[str, Tuple[str, Tuple[str, ...]]] = {
     "DENIZBANK": ("DenizBank", ("denizbank.com.tr", "denizbank.com")),
+    "ZIRAATKATILIM": ("ZiraatKatilim", ("ziraatkatilim.com.tr",)),
+    # ✅ NEW (image-based PDF)
+    "ALBARAKA": ("Albaraka", ("albaraka.com.tr",)),
 }
 
-
-# ✅ DENIZ LEGAL NAME FALLBACK (REAL PDFs NEED THIS)
+# Deniz legal-name fallback (real PDFs need this)
 DENIZ_TEXT_MARKERS = (
     "denizbank a.s",
     "denizbank a.ş",
@@ -121,7 +127,6 @@ DENIZ_TEXT_MARKERS = (
 
 
 def _detect_bank_by_text_domains(text_norm: str) -> Optional[dict]:
-    """Detect bank by website domain (fast path)."""
     for key, (bank_name, domains) in BANK_DOMAINS.items():
         for dom in domains:
             if has_domain(text_norm, dom):
@@ -135,7 +140,6 @@ def _detect_bank_by_text_domains(text_norm: str) -> Optional[dict]:
 
 
 def _detect_deniz_by_text_name(text_norm: str) -> Optional[dict]:
-    """Detect Deniz by legal name (fallback)."""
     if any(m in text_norm for m in DENIZ_TEXT_MARKERS):
         return {
             "key": "DENIZBANK",
@@ -147,13 +151,11 @@ def _detect_deniz_by_text_name(text_norm: str) -> Optional[dict]:
 
 
 def _detect_bank_by_ocr_domains(pdf_path: Path) -> Optional[dict]:
-    """OCR first page and detect ONLY allowlisted banks."""
     raw = ocr_first_page_text(pdf_path)
     if not raw:
         return None
 
     t = normalize_text(raw)
-
     for key, (bank_name, domains) in OCR_DOMAIN_BANKS.items():
         for dom in domains:
             if has_domain(t, dom):
@@ -163,7 +165,6 @@ def _detect_bank_by_ocr_domains(pdf_path: Path) -> Optional[dict]:
                     "variant": None,
                     "method": "ocr-domain",
                 }
-
     return None
 
 
@@ -172,73 +173,23 @@ def _detect_bank_by_ocr_domains(pdf_path: Path) -> Optional[dict]:
 # =============================================================================
 
 
-def _variant_ziraat(text_norm: str) -> Tuple[str, str]:
-    if any(
-        k in text_norm for k in ("hesaptan fast", "fast mesaj kodu", "fast sorgu no")
-    ):
-        return "ZIRAAT_FAST", "FAST"
-    if "hesaptan hesaba havale" in text_norm:
-        return "ZIRAAT_HAVALE", "HAVALE"
-    return "ZIRAAT", "UNKNOWN"
-
-
-def _variant_yapikredi(text_norm: str) -> Tuple[str, str]:
-    if "fast gonderimi" in text_norm:
-        return "YAPIKREDI_FAST", "FAST"
-    if any(
-        k in text_norm for k in ("havale-borc", "dekont tipi : hvl", "alacakli hesap")
-    ):
-        return "YAPIKREDI_HAVALE", "HAVALE"
-    return "YAPIKREDI", "UNKNOWN"
-
-
-def _variant_kuveytturk(text_norm: str) -> Tuple[str, str]:
-    en_markers = (
-        "kuveyt turk participation bank",
-        "money transfer to iban",
-        "outgoing",
-        "transactiondate",
-        "query number",
-    )
-    tr_markers = (
-        "kuveyt turk katilim bankasi",
-        "iban'a para transferi",
-        "mobil sube",
-        "aciklama",
-        "sorgu numarasi",
-        "islem tarihi",
-    )
-    if any(k in text_norm for k in en_markers):
-        return "KUVEYT_TURK_EN", "EN"
-    if any(k in text_norm for k in tr_markers):
-        return "KUVEYT_TURK_TR", "TR"
-    return "KUVEYT_TURK", "UNKNOWN"
-
-
-def _variant_garanti(text_norm: str) -> Tuple[str, str]:
-    if re.search(r"\bfast\b", text_norm) and (
-        "ref" in text_norm or "referans" in text_norm
-    ):
-        return "GARANTI_FAST", "FAST"
-    if re.search(r"\bhavale\b", text_norm):
-        return "GARANTI_HAVALE", "HAVALE"
-    return "GARANTI", "UNKNOWN"
-
-
 def _variant_deniz(text_norm: str) -> Tuple[str, str]:
-    # ✅ IMPORTANT:
-    # Parser key must remain "DENIZBANK" because you don't have "DENIZBANK_FAST" registered.
+    # Keep parser key DENIZBANK (no DENIZBANK_FAST parser)
     if re.search(r"\bfast\b", text_norm):
         return "DENIZBANK", "FAST"
     return "DENIZBANK", "UNKNOWN"
 
 
+def _variant_albaraka(text_norm: str) -> Tuple[str, str]:
+    # Keep parser key ALBARAKA (single parser for now)
+    if re.search(r"\bfast\b", text_norm) or "fast sorgu numarasi" in text_norm:
+        return "ALBARAKA", "FAST"
+    return "ALBARAKA", "UNKNOWN"
+
+
 VARIANT_AFTER_BANK = {
-    "ZIRAAT": _variant_ziraat,
-    "YAPIKREDI": _variant_yapikredi,
-    "KUVEYT_TURK": _variant_kuveytturk,
-    "GARANTI": _variant_garanti,
     "DENIZBANK": _variant_deniz,
+    "ALBARAKA": _variant_albaraka,
 }
 
 
@@ -256,21 +207,16 @@ def _apply_variant(bank_key: str, text_norm: str) -> Tuple[str, Optional[str]]:
 
 
 def detect_bank_variant(pdf_path: Path, use_ocr_fallback: bool = False) -> dict:
-    """
-    Flow:
-      1) Domain detection (all banks)
-      2) Deniz legal-name fallback
-      3) OCR allowlist (Deniz only)
-      4) Variant detection (but keep parser keys that exist)
-    """
     raw = extract_text(pdf_path, max_pages=2)
     text_norm = normalize_text(raw)
 
     det = _detect_bank_by_text_domains(text_norm)
 
+    # Deniz fallback (name-based) only if no domain
     if not det:
         det = _detect_deniz_by_text_name(text_norm)
 
+    # OCR only if still nothing (and only for allowlist)
     if not det:
         det = _detect_bank_by_ocr_domains(pdf_path)
 
