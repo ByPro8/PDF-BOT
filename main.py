@@ -1,9 +1,9 @@
-import os
 import tempfile
 import logging
 import time
 import secrets
 import shutil
+from html import escape
 from pathlib import Path
 from typing import Tuple
 
@@ -18,8 +18,6 @@ from app.parsers.registry import parse_by_key
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
-USE_OCR = os.getenv("USE_OCR", "0") == "1"
-
 log = logging.getLogger("pdf-checker")
 if not log.handlers:
     logging.basicConfig(level=logging.INFO)
@@ -30,14 +28,13 @@ if not log.handlers:
 PDF_STORE_DIR = Path(tempfile.gettempdir()) / "pdf_checker_store"
 PDF_STORE_DIR.mkdir(parents=True, exist_ok=True)
 
-_PDF_TTL_SECONDS = 60 * 30  # keep for 30 minutes
+_PDF_TTL_SECONDS = 60 * 30  # 30 minutes
 
 
 def _cleanup_pdf_store() -> None:
-    """Delete stored PDFs older than TTL (safe across multiple workers)."""
     now = time.time()
     try:
-        for p in PDF_STORE_DIR.glob("*__*.pdf"):
+        for p in PDF_STORE_DIR.glob("*__*"):
             try:
                 if (now - p.stat().st_mtime) > _PDF_TTL_SECONDS:
                     p.unlink(missing_ok=True)
@@ -52,8 +49,6 @@ def _store_pdf_for_view(src_path: Path, original_name: str) -> str:
 
     token = secrets.token_urlsafe(16)
     safe_name = (original_name or "file.pdf").replace("/", "_").replace("\\", "_")
-
-    # store as: <token>__<originalfilename>.pdf
     dst = PDF_STORE_DIR / f"{token}__{safe_name}"
 
     try:
@@ -72,7 +67,6 @@ def _get_pdf_by_token(token: str) -> Tuple[Path, str]:
     if not matches:
         raise HTTPException(status_code=404, detail="PDF not found (expired)")
 
-    # if duplicates exist, newest wins
     matches.sort(key=lambda p: p.stat().st_mtime, reverse=True)
     p = matches[0]
     name = p.name.split("__", 1)[1] if "__" in p.name else "file.pdf"
@@ -100,10 +94,50 @@ def home(request: Request):
 
 
 # -------------------------
-# View PDF (INLINE)
+# PDF VIEW (HTML WRAPPER => TAB TITLE ALWAYS = FILENAME)
 # -------------------------
-@app.get("/pdf/{token}")
+@app.get("/pdf/{token}", response_class=HTMLResponse)
 def view_pdf(token: str):
+    _p, name = _get_pdf_by_token(token)
+
+    title = escape(name)
+    tok = escape(token)
+
+    html = f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{title}</title>
+  <style>
+    html, body {{ height: 100%; margin: 0; background: #0b1220; }}
+    .bar {{
+      height: 44px; display: flex; align-items: center; gap: 12px;
+      padding: 0 12px; box-sizing: border-box;
+      color: #e5e7eb; font-family: Arial, sans-serif; font-size: 14px;
+      background: #020617; border-bottom: 1px solid rgba(255,255,255,0.08);
+    }}
+    .bar a {{ color: #93c5fd; text-decoration: none; }}
+    .bar a:hover {{ text-decoration: underline; }}
+    iframe {{ width: 100%; height: calc(100% - 44px); border: 0; background: #0b1220; }}
+  </style>
+</head>
+<body>
+  <div class="bar">
+    <div style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{title}</div>
+    <a href="/pdf/{tok}/download">Download</a>
+  </div>
+  <iframe src="/pdf/{tok}/raw" title="{title}"></iframe>
+</body>
+</html>"""
+    return HTMLResponse(content=html)
+
+
+# -------------------------
+# PDF RAW (actual bytes)
+# -------------------------
+@app.get("/pdf/{token}/raw")
+def view_pdf_raw(token: str):
     p, name = _get_pdf_by_token(token)
     return FileResponse(
         path=str(p),
@@ -131,10 +165,10 @@ def download_pdf(token: str):
 def check_pdf(file: UploadFile = File(...)):
     path = save_temp(file)
     try:
-        detected = detect_bank_variant(path, use_ocr_fallback=USE_OCR)
+        detected = detect_bank_variant(path)
 
         try:
-            data = parse_by_key(detected["key"], path)
+            data = parse_by_key(detected.get("key", ""), path)
         except Exception as e:
             data = {"error": f"{type(e).__name__}: {e}"}
 
@@ -148,7 +182,7 @@ def check_pdf(file: UploadFile = File(...)):
             "message": f"Uploaded: {file.filename}",
             "detected": detected,
             "data": data,
-            "view_url": f"/pdf/{token}",
+            "view_url": f"/pdf/{token}",  # opens wrapper => correct tab title
             "download_url": f"/pdf/{token}/download",
         }
 
