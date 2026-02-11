@@ -34,7 +34,6 @@ def _find(raw: str, pat: str) -> Optional[str]:
 
 
 def _pick_transfer_amount(raw: str) -> Optional[str]:
-    # Prefer "ŞCH 0,00 TL 50.000,00 TL"
     m = re.search(
         r"^\s*ŞCH\s+[0-9\.\,]+\s*TL\s+([0-9\.\,]+)\s*TL\s*$",
         raw,
@@ -43,7 +42,6 @@ def _pick_transfer_amount(raw: str) -> Optional[str]:
     if m:
         return f"{m.group(1).strip()} TL"
 
-    # Fallback: choose biggest TL amount (transfer is usually biggest)
     nums = re.findall(r"([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})\s*TL", raw)
     if not nums:
         return None
@@ -69,7 +67,6 @@ def _detect_tr_status(raw: str) -> str:
 
 
 def _last_datetime(raw: str) -> Optional[str]:
-    # Akbank sometimes prints the datetime later as ": 28.12.2025 10:08:55"
     hits = re.findall(
         r"([0-9]{2}\.[0-9]{2}\.[0-9]{4}\s+[0-9]{2}:[0-9]{2}:[0-9]{2})", raw
     )
@@ -77,27 +74,98 @@ def _last_datetime(raw: str) -> Optional[str]:
 
 
 def _pick_receiver_iban(raw: str, sender_iban: Optional[str]) -> Optional[str]:
-    # Collect all IBAN-like strings and choose the one != sender_iban
     ibans = re.findall(r"(TR[0-9][0-9\s]{18,})", raw, flags=re.IGNORECASE)
     ibans = [_iban_compact(_clean(x)) for x in ibans]
-    ibans = [x for x in ibans if x and len(x) >= 26]  # TR + 24 chars
+    ibans = [x for x in ibans if x and len(x) >= 26]
 
     sender_iban_c = _iban_compact(sender_iban) if sender_iban else None
 
-    # Prefer an IBAN that is not the sender's
     for ib in ibans:
         if sender_iban_c and ib == sender_iban_c:
             continue
         return ib
 
-    # If only one exists, return it
     return ibans[0] if ibans else None
+
+
+def _looks_like_name(s: Optional[str]) -> bool:
+    s = _clean(s)
+    if not s:
+        return False
+    if len(s) < 4 or len(s) > 80:
+        return False
+    if "TL" in s.upper():
+        return False
+    if re.search(r"\d", s):
+        return False
+    if s.count(" ") < 1:
+        return False
+    if not re.search(r"[A-Za-zÇĞİÖŞÜçğıöşü]", s):
+        return False
+    return True
+
+
+def _receiver_name_after_iban(
+    raw: str, receiver_iban: Optional[str], sender_name: Optional[str]
+) -> Optional[str]:
+    if not receiver_iban:
+        return None
+
+    lines = raw.splitlines()
+    target = receiver_iban.upper()
+
+    for i, line in enumerate(lines):
+        comp = re.sub(r"\s+", "", line).upper()
+        if target in comp:
+            for j in range(i + 1, min(i + 8, len(lines))):
+                m = re.match(r"^\s*:\s*(.+?)\s*$", lines[j])
+                if not m:
+                    continue
+                cand = _clean(m.group(1))
+                if not _looks_like_name(cand):
+                    continue
+                if sender_name and cand == sender_name:
+                    continue
+                return cand
+    return None
+
+
+def _any_colon_name(raw: str, sender_name: Optional[str]) -> Optional[str]:
+    for m in re.finditer(r"^\s*:\s*([^\n]+)\s*$", raw, flags=re.MULTILINE):
+        cand = _clean(m.group(1))
+        if not _looks_like_name(cand):
+            continue
+        if sender_name and cand == sender_name:
+            continue
+        return cand
+    return None
+
+
+def _split_receipt_pair(
+    receipt_line: Optional[str],
+) -> tuple[Optional[str], Optional[str]]:
+    """
+    Input examples:
+      "30940173 / 360875 /"
+      "52586962 / 255724 /"
+
+    Output:
+      receipt_no = first number only
+      transaction_ref = second number
+    """
+    if not receipt_line:
+        return None, None
+    nums = re.findall(r"\d+", receipt_line)
+    if len(nums) >= 2:
+        return nums[0], nums[1]
+    if len(nums) == 1:
+        return nums[0], None
+    return None, None
 
 
 def parse_akbank(pdf_path: Path) -> Dict:
     raw = _extract_text(pdf_path, max_pages=2)
 
-    # Akbank puts BOTH "Adı Soyadı/Unvan :" on the same line.
     names = re.findall(
         r"Adı\s+Soyadı/Unvan\s*:\s*(.+?)(?=\s+Adı\s+Soyadı/Unvan\s*:|\n|$)",
         raw,
@@ -108,26 +176,32 @@ def parse_akbank(pdf_path: Path) -> Dict:
     sender_name = names[0] if len(names) >= 1 else None
     receiver_name = names[1] if len(names) >= 2 else None
 
-    # Sender IBAN is a standalone TR... line in your PDFs
+    if not sender_name:
+        sender_name = _find(raw, r"İşlemi\s+Yapan\s+Ad-?Soyad\s*:\s*([^\n]+)") or _find(
+            raw, r"Islemi\s+Yapan\s+Ad-?Soyad\s*:\s*([^\n]+)"
+        )
+
     sender_iban = _find(raw, r"\n(TR[0-9\s]{20,})\n")
     sender_iban = _iban_compact(sender_iban)
 
-    # Receiver IBAN varies by layout; pick from all IBANs that aren't sender
     receiver_iban = _pick_receiver_iban(raw, sender_iban)
 
     amount = _pick_transfer_amount(raw)
 
-    # Old strict pattern (kept), but add fallback to last datetime anywhere
     transaction_time = _find(
         raw,
         r"İşlem\s+Tarihi/Saati\s*:\s*([0-9]{2}\.[0-9]{2}\.[0-9]{4}\s+[0-9]{2}:[0-9]{2}:[0-9]{2})",
     ) or _last_datetime(raw)
 
-    # This appears as: "38077981 / 219619 /"
-    receipt_no = _find(raw, r"([0-9]{5,}\s*/\s*[0-9]{3,}\s*/)")
+    # This appears as: "30940173 / 360875 /"
+    receipt_line = _find(raw, r"([0-9]{5,}\s*/\s*[0-9]{3,}\s*/)")
+    receipt_no, transaction_ref = _split_receipt_pair(receipt_line)
 
-    # "Referans :" is often blank in this layout, so keep None unless found
-    transaction_ref = _find(raw, r"Referans\s*:\s*([A-Z0-9\-\/]+)")
+    # Receiver name fallback (for weird extraction ordering PDFs)
+    if not receiver_name:
+        receiver_name = _receiver_name_after_iban(
+            raw, receiver_iban, sender_name
+        ) or _any_colon_name(raw, sender_name)
 
     return {
         "tr_status": _detect_tr_status(raw),

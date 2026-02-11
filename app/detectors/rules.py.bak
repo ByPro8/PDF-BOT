@@ -69,53 +69,6 @@ def detect_deniz_by_text_name(text_norm: str) -> Optional[dict]:
     return None
 
 
-def _has_domain_ocr(text_norm: str, domain: str) -> bool:
-    """
-    OCR-tolerant matcher.
-
-    IMPORTANT:
-    - Only used inside OCR allowlist flow.
-    - Keeps text-layer detection strict (text_layer.has_domain stays unchanged).
-
-    Handles:
-    - missing dots/spaces (already handled by has_domain in many cases)
-    - common OCR confusion for ziraatkatilim.com.tr: "ziraetkatiim com.tr"
-    """
-    if not text_norm or not domain:
-        return False
-
-    # First try the normal (space/dot tolerant) matcher.
-    if has_domain(text_norm, domain):
-        return True
-
-    dom = (domain or "").casefold().strip()
-    t = text_norm
-
-    # Special-case: ziraatkatilim.com.tr frequently OCRs as:
-    #   ziraetkatiim com.tr (a->e, missing 'l', extra i)
-    if dom == "ziraatkatilim.com.tr":
-        # Match:
-        #  www zira(a/e)at kati(l optional)(i/l optional)im com tr
-        #  allowing spaces between letters and dots optional
-        pat = (
-            r"(?:www\s*)?"
-            r"z\s*i\s*r\s*a\s*(?:a|e)\s*t\s*"
-            r"k\s*a\s*t\s*i\s*(?:l\s*)?(?:i|l)?\s*m\s*"
-            r"(?:\s*\.?\s*)?"
-            r"c\s*o\s*m\s*\.?\s*t\s*r"
-        )
-        if re.search(pat, t, flags=re.I):
-            return True
-
-        # One more ultra-loose fallback: strip non-alnum and check "comtr" + core presence
-        core = re.sub(r"[^a-z0-9]", "", t)
-        # Accept either exact or common OCR variant
-        return ("ziraatkatilimcomtr" in core) or ("ziraetkatiimcomtr" in core)
-
-    # Default: keep strict enough. If has_domain() failed, we don't guess.
-    return False
-
-
 def detect_bank_by_ocr_domains(pdf_path: Path) -> Optional[dict]:
     raw = ocr_first_page_text(pdf_path)
     if not raw:
@@ -124,7 +77,7 @@ def detect_bank_by_ocr_domains(pdf_path: Path) -> Optional[dict]:
     t = normalize_text(raw)
     for key, (bank_name, domains) in OCR_DOMAIN_BANKS.items():
         for dom in domains:
-            if _has_domain_ocr(t, dom):
+            if has_domain(t, dom):
                 return {
                     "key": key,
                     "bank": bank_name,
