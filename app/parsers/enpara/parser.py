@@ -35,9 +35,15 @@ def _find_group(text: str, pattern: str) -> Optional[str]:
 
 
 def _iban_clean(s: str) -> str:
-    # Keep original spacing style but normalize internal spaces
-    s = _clean_spaces(s)
-    return s
+    return _clean_spaces(s)
+
+
+def _find_any_iban(raw: str) -> Optional[str]:
+    # Finds first IBAN-ish TR.. anywhere (with or without spaces)
+    m = re.search(r"\bTR(?:\s*\d){24,}\b", raw, flags=re.IGNORECASE)
+    if not m:
+        return None
+    return _iban_clean(m.group(0))
 
 
 def _find_sender_name(raw: str) -> Optional[str]:
@@ -45,7 +51,6 @@ def _find_sender_name(raw: str) -> Optional[str]:
     m = re.search(r"Sayın\s+([^\n]+)", raw, flags=re.IGNORECASE)
     if m:
         name = _clean_spaces(m.group(1))
-        # Sometimes address continues; stop at long stars if present
         name = name.split("*")[0].strip()
         return name or None
 
@@ -54,26 +59,52 @@ def _find_sender_name(raw: str) -> Optional[str]:
 
 
 def _find_sender_iban(raw: str) -> Optional[str]:
-    # "MÜŞTERİ ÜNVANI: X IBAN : TR..."
-    m = re.search(r"MÜŞTERİ\s+ÜNVANI\s*:\s*.*?\s+IBAN\s*:\s*(TR[0-9\s]{24,})", raw, flags=re.IGNORECASE)
+    # FAST format
+    m = re.search(
+        r"MÜŞTERİ\s+ÜNVANI\s*:\s*.*?\s+IBAN\s*:\s*(TR[0-9\s]{24,})",
+        raw,
+        flags=re.IGNORECASE,
+    )
     if m:
         return _iban_clean(m.group(1))
 
-    # fallback: first TR... after "Vadesiz TL"
-    m = re.search(r"Vadesiz\s+TL\s+.*?\s+(TR[0-9]{24,})", raw, flags=re.IGNORECASE)
-    if m:
-        return _iban_clean(m.group(1))
-    return None
+    # Older/table extraction often scrambles spacing; just take first IBAN in doc
+    return _find_any_iban(raw)
 
 
 def _find_receiver_name(raw: str) -> Optional[str]:
-    return _find_group(raw, r"ALICI\s+ÜNVANI\s*:\s*([^\n]+?)\s+ALICI\s+IBAN")
+    # FAST format: "ALICI ÜNVANI: X  ALICI IBAN:"
+    m = re.search(
+        r"ALICI\s+ÜNVANI\s*:\s*([^\n]+?)\s+ALICI\s+IBAN", raw, flags=re.IGNORECASE
+    )
+    if m:
+        return _clean_spaces(m.group(1)) or None
+
+    # HAVALE format: "HAVALEYİ ALAN MUSTERİ UNVANI: X"
+    m = re.search(
+        r"HAVALEYİ\s+ALAN\s+MUSTERI\s+UNVANI\s*:\s*([^\n]+)", raw, flags=re.IGNORECASE
+    )
+    if m:
+        return _clean_spaces(m.group(1)) or None
+
+    return None
 
 
 def _find_receiver_iban(raw: str) -> Optional[str]:
+    # FAST format
     m = re.search(r"ALICI\s+IBAN\s*:\s*(TR[0-9\s]{24,})", raw, flags=re.IGNORECASE)
     if m:
         return _iban_clean(m.group(1))
+
+    # HAVALE format (often: "... IBAN: TR95 0015 ...")
+    m = re.search(
+        r"HAVALEYİ\s+ALAN.*?\bIBAN\s*:\s*(TR[0-9\s]{24,})",
+        raw,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if m:
+        return _iban_clean(m.group(1))
+
     return None
 
 
@@ -83,14 +114,21 @@ def _find_amount(raw: str) -> Optional[str]:
     if m:
         return f"{m.group(1).strip()} TL"
 
-    # Fallback: table end "... B TL 50,000.00"
+    # HAVALE table line sometimes extracts like: "... TLB 8,326.00TR03..."
+    m = re.search(r"\bTL\s*B?\s*([0-9][0-9\.\,]+)\b", raw, flags=re.IGNORECASE)
+    if m:
+        return f"{m.group(1).strip()} TL"
+
+    # Last-resort: line that ends with "TL <amount>" (older behavior)
     m = re.search(r"\bTL\s+([0-9\.\,]+)\s*$", raw, flags=re.IGNORECASE | re.MULTILINE)
     if m:
         return f"{m.group(1).strip()} TL"
+
     return None
 
 
 def _find_query_no(raw: str) -> Optional[str]:
+    # FAST "SORGU NO"
     m = re.search(r"SORGU\s+NO\s*:\s*([0-9]+)", raw, flags=re.IGNORECASE)
     if m:
         return m.group(1).strip()
@@ -101,12 +139,10 @@ def _find_query_no(raw: str) -> Optional[str]:
 
 
 def _find_fis_no(raw: str) -> Optional[str]:
-    # "Fiş No 202601287457054"
+    # "Fiş No 2026...." or extracted as "Sıra No Fiş No 2026...."
     m = re.search(r"Fiş\s+No\s+([0-9]+)", raw, flags=re.IGNORECASE)
     if m:
         return m.group(1).strip()
-
-    # Sometimes it appears as: "Sıra No Fiş No 2026...." (fis only)
     m = re.search(r"Sıra\s+No\s+Fiş\s+No\s+([0-9]+)", raw, flags=re.IGNORECASE)
     if m:
         return m.group(1).strip()
@@ -114,16 +150,21 @@ def _find_fis_no(raw: str) -> Optional[str]:
 
 
 def _find_sira_no(raw: str) -> Optional[str]:
-    # "Sıra No 03663-03663-100509877"
-    m = re.search(r"Sıra\s+No\s+([0-9]{4,}(?:-[0-9]{2,}){1,})", raw, flags=re.IGNORECASE)
+    # "Sıra No 03663-03663-xxxx"
+    m = re.search(
+        r"Sıra\s+No\s+([0-9]{4,}(?:-[0-9]{2,}){1,})", raw, flags=re.IGNORECASE
+    )
     if m:
         return _clean_spaces(m.group(1))
     return None
 
 
 def _find_transaction_time(raw: str) -> Optional[str]:
-    # Sometimes split: date on one line, time elsewhere.
-    m = re.search(r"İşlem\s+tarihi\s+ve\s+saati\s+(\d{2}\.\d{2}\.\d{4})(?:\s+(\d{2}:\d{2}))?", raw, flags=re.IGNORECASE)
+    m = re.search(
+        r"İşlem\s+tarihi\s+ve\s+saati\s+(\d{2}\.\d{2}\.\d{4})(?:\s+(\d{2}:\d{2}))?",
+        raw,
+        flags=re.IGNORECASE,
+    )
     if not m:
         return None
 
@@ -131,7 +172,6 @@ def _find_transaction_time(raw: str) -> Optional[str]:
     tm = m.group(2)
 
     if not tm:
-        # grab first HH:MM in doc (usually top-left)
         t2 = re.search(r"\b(\d{2}:\d{2})\b", raw)
         tm = t2.group(1) if t2 else None
 
@@ -144,10 +184,20 @@ def _detect_tr_status(raw: str) -> str:
         return "canceled"
     if re.search(r"\bbeklemede\b|\bisleniyor\b|\bonay bekliyor\b", t):
         return "pending"
-    # These are receipts/decots shown after the fact
     if "dekont" in t:
         return "completed"
     return "unknown"
+
+
+def _find_transaction_ref(raw: str) -> Optional[str]:
+    # FAST: SORGU NO, otherwise use Fiş No for HAVALE docs
+    q = _find_query_no(raw)
+    if q:
+        return q
+    f = _find_fis_no(raw)
+    if f:
+        return f
+    return None
 
 
 def parse_enpara(pdf_path: Path) -> Dict:
@@ -163,5 +213,5 @@ def parse_enpara(pdf_path: Path) -> Dict:
         "transaction_time": _find_transaction_time(raw),
         "sira_no": _find_sira_no(raw),
         "fis_no": _find_fis_no(raw),
-        "transaction_ref": _find_query_no(raw),  # SORGU NO
+        "transaction_ref": _find_transaction_ref(raw),
     }

@@ -81,7 +81,10 @@ def _detect_tr_status(raw_text: str) -> str:
         return "canceled"
     if re.search(r"\bbasarisiz\b|\bhata\b|\breddedildi\b|\bfailed\b|\brejected\b", t):
         return "failed"
-    if re.search(r"\bbeklemede\b|\bonay bekliyor\b|\bonayda\b|\baskida\b|\bisleniyor\b|\bpending\b|\bprocessing\b", t):
+    if re.search(
+        r"\bbeklemede\b|\bonay bekliyor\b|\bonayda\b|\baskida\b|\bisleniyor\b|\bpending\b|\bprocessing\b",
+        t,
+    ):
         return "pending"
 
     # PTT explicit completion: "... hesabınızdan ... çekilmiştir."
@@ -101,7 +104,9 @@ def parse_pttbank(pdf_path: Path) -> Dict:
     amount = _value_inline(lines, "Tutar")
     receipt_no = _value_inline(lines, "İşlem Sıra No")
 
-    tt_raw = _value_inline(lines, "İŞLEM TARİHİ") or _value_inline(lines, "İşlem Tarihi")
+    tt_raw = _value_inline(lines, "İŞLEM TARİHİ") or _value_inline(
+        lines, "İşlem Tarihi"
+    )
     transaction_time = _parse_ptt_time(tt_raw or "")
 
     if not transaction_time:
@@ -121,5 +126,4 @@ def parse_pttbank(pdf_path: Path) -> Dict:
         "amount": amount,
         "transaction_time": transaction_time,
         "receipt_no": receipt_no,
-        "transaction_ref": None,
     }

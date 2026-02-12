@@ -116,12 +116,11 @@ def _find_transaction_ref(raw: str) -> Optional[str]:
 
 def _find_receiver_name(raw: str) -> Optional[str]:
     """
-    ING file packs receiver into the Açıklama line:
+    ING packs receiver into the Açıklama line:
     Açıklama : Giden FAST Sorgu No:... TR.... <Bank Name> <Receiver Name>
-    We'll:
-      1) take the Açıklama line
-      2) cut everything up to the receiver IBAN
-      3) remove common bank tail like 'A.Ş.' and keep last name chunk
+
+    We extract the text AFTER the IBAN, then drop the bank/legal part
+    (T.A.Ş. / A.Ş.) and keep only the actual person/company name.
     """
     m = re.search(r"A[cç]ıklama\s*:\s*([^\n]+)", raw, re.I)
     if not m:
@@ -129,31 +128,25 @@ def _find_receiver_name(raw: str) -> Optional[str]:
 
     desc = m.group(1).strip()
 
-    iban = _find_iban(desc) or _find_iban(raw)
-    if not iban:
+    # Tail = everything after the IBAN inside the Açıklama line
+    m2 = re.search(r"\bTR\s*(?:\d\s*){24}\b\s*(.+)$", desc, re.I)
+    if not m2:
         return None
 
-    # cut to the right of iban
-    idx = desc.upper().find(re.sub(r"\s+", "", iban).upper())
-    if idx == -1:
-        # try spaced version
-        idx = desc.upper().find(iban.upper())
+    tail = m2.group(1).strip()
 
-    tail = desc
-    if idx != -1:
-        tail = desc[idx + len(iban) :].strip()
-
-    # remove known bank words (best-effort)
-    tail = re.sub(
-        r"\b(T[üu]rkiye|Cumhuriyeti|Bankas[ıi]|Bankasi|A\.?S\.?|A\.?Ş\.?|A\.?S)\b",
-        " ",
-        tail,
-        flags=re.I,
+    # If there is A.Ş. / T.A.Ş. etc, receiver name is after the LAST one
+    parts = re.split(
+        r"(?:T\.?\s*A\.?\s*Ş\.?|A\.?\s*Ş\.?|A\.?\s*S\.?)\s*", tail, flags=re.I
     )
-    tail = re.sub(r"\s+", " ", tail).strip()
+    name = parts[-1].strip() if parts else tail
 
-    # receiver name is usually the remaining text; keep it as-is but cleaned
-    return _cleanup_name(tail) if tail else None
+    # Clean punctuation leftovers from bank removal
+    name = re.sub(r"^[\s\.\,\-–—:;]+", "", name)
+    name = re.sub(r"[\s\.\,\-–—:;]+$", "", name)
+    name = re.sub(r"\s+", " ", name).strip()
+
+    return _cleanup_name(name) if name else None
 
 
 # ----------------------------
