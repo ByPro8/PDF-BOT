@@ -161,6 +161,7 @@ async function checkPdf() {
 
     try {
         const r = await fetch("/check", { method: "POST", body: fd });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const j = await r.json();
 
         showPre(
@@ -178,6 +179,13 @@ async function checkPdf() {
     }
 }
 
+/**
+ * Batch parallelism:
+ * - Render-friendly: cap concurrency (default 4)
+ * - UI stable: create blocks in original order, then fill them as results complete
+ */
+const BATCH_CONCURRENCY = 4;
+
 async function checkPdfBatch() {
     const input = document.getElementById("checkFiles");
     const files = Array.from(input?.files || []);
@@ -187,15 +195,20 @@ async function checkPdfBatch() {
     window.MetaPanel?.clear?.(); // no meta in batch for now
     appendPre(`Batch selected: <span class="imp">${files.length}</span>\n\n`, true);
 
+    // Create output blocks in the same order as selected files
     const blocks = files.map((f) => appendPre(makeProcessingBlock(f.name), false, "", ""));
 
-    for (let i = 0; i < files.length; i++) {
+    // Shared index for the pool
+    let nextIndex = 0;
+
+    async function processOne(i) {
         const f = files[i];
         const fd = new FormData();
         fd.append("file", f);
 
         try {
             const r = await fetch("/check", { method: "POST", body: fd });
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
             const j = await r.json();
 
             blocks[i].innerHTML = headerBlock(f.name, j.detected, j.download_url || "") + formatData(j.data);
@@ -205,6 +218,19 @@ async function checkPdfBatch() {
             blocks[i].innerHTML = `❌ Error processing ${escapeHtml(f.name)}\n${escapeHtml(String(e))}\n`;
         }
     }
+
+    async function worker() {
+        while (true) {
+            const i = nextIndex;
+            nextIndex += 1;
+            if (i >= files.length) return;
+            await processOne(i);
+        }
+    }
+
+    // Start N workers (cap by number of files)
+    const n = Math.max(1, Math.min(BATCH_CONCURRENCY, files.length));
+    await Promise.all(Array.from({ length: n }, () => worker()));
 
     if (input) input.value = "";
 }
