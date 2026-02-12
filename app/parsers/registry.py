@@ -3,13 +3,16 @@
 `detect_bank_variant()` returns a dict with a `key`. This module maps that key to a
 parser function.
 
-Keeping all mappings here prevents 'detected but not parsed' regressions.
+Phase 2B:
+- parse_by_key can pass cached text to parsers (text_raw/text_norm)
+- backward compatible: if a parser doesn't accept those args, we call it the old way.
 """
 
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, Optional, Any
 
 from app.parsers.akbank.parser import parse_akbank
 from app.parsers.denizbank.parser import parse_denizbank
@@ -33,14 +36,13 @@ from app.parsers.yapikredi.parser import (
 from app.parsers.ziraat.parser import parse_ziraat
 from app.parsers.kuveytturk.parser import parse_kuveyt_turk_unknown
 
-# ✅ NEW
 from app.parsers.upt.parser import parse_upt
 from app.parsers.fibabanka.parser import parse_fibabanka
 from app.parsers.ziraatkatilim.parser import parse_ziraatkatilim
 from app.parsers.albaraka.parser import parse_albaraka
 
 
-ParserFn = Callable[[Path], dict]
+ParserFn = Callable[..., dict]
 
 REGISTRY: Dict[str, ParserFn] = {
     # Garanti
@@ -79,7 +81,7 @@ REGISTRY: Dict[str, ParserFn] = {
     "HALKBANK": parse_halkbank,
     "ING": parse_ing,
     "QNB": parse_qnb,
-    # ✅ NEW BANKS
+    # New banks
     "UPT": parse_upt,
     "FIBABANKA": parse_fibabanka,
     "ZIRAATKATILIM": parse_ziraatkatilim,
@@ -87,8 +89,44 @@ REGISTRY: Dict[str, ParserFn] = {
 }
 
 
-def parse_by_key(key: str, pdf_path: Path) -> Optional[dict]:
+def _call_parser(fn: ParserFn, pdf_path: Path, *, text_raw: Optional[str], text_norm: Optional[str]) -> dict:
+    """
+    Backward compatible call:
+    - If parser supports text_raw/text_norm, pass them.
+    - Otherwise call old signature (pdf_path only).
+    """
+    try:
+        sig = inspect.signature(fn)
+        params = sig.parameters
+
+        kwargs: Dict[str, Any] = {}
+        if "text_raw" in params:
+            kwargs["text_raw"] = text_raw
+        if "text_norm" in params:
+            kwargs["text_norm"] = text_norm
+
+        # If it accepts **kwargs we can safely pass both
+        if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()):
+            kwargs["text_raw"] = text_raw
+            kwargs["text_norm"] = text_norm
+
+        if kwargs:
+            return fn(pdf_path, **kwargs)
+        return fn(pdf_path)
+
+    except TypeError:
+        # Ultra-safe fallback: old calling style
+        return fn(pdf_path)
+
+
+def parse_by_key(
+    key: str,
+    pdf_path: Path,
+    *,
+    text_raw: Optional[str] = None,
+    text_norm: Optional[str] = None,
+) -> Optional[dict]:
     fn = REGISTRY.get(key)
     if not fn:
         return {"error": f"No parser registered for key: {key}"}
-    return fn(pdf_path)
+    return _call_parser(fn, pdf_path, text_raw=text_raw, text_norm=text_norm)

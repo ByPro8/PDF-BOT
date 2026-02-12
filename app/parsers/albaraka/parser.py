@@ -47,7 +47,6 @@ def _find(raw: str, pat: str) -> Optional[str]:
 
 
 def _find_all_ibans(raw: str) -> list[str]:
-    # Pull anything that looks like TR + 24 digits with optional whitespace
     hits = re.findall(r"(TR[0-9\s]{24,})", raw, flags=re.IGNORECASE)
     out: list[str] = []
     for h in hits:
@@ -58,13 +57,11 @@ def _find_all_ibans(raw: str) -> list[str]:
 
 
 def _extract_sender_iban(raw: str) -> Optional[str]:
-    # Right-side block: "IBAN : TR33 0020 ..."
     s = _find(raw, r"\bIBAN\s*:\s*(TR[0-9\s]{20,})")
     return _iban_compact(s)
 
 
 def _extract_receiver_iban(raw: str, sender_iban: Optional[str]) -> Optional[str]:
-    # 1) Best: labeled receiver line (handles Alıcı / Alici and weird OCR spacing)
     labeled = _find(
         raw,
         r"Al[ıi]c[ıi]\s+Hesap\s*/\s*IBA\s*N\s+No\s*:\s*(TR[0-9\s]{20,})",
@@ -73,8 +70,6 @@ def _extract_receiver_iban(raw: str, sender_iban: Optional[str]) -> Optional[str
     if ib and (not sender_iban or ib != sender_iban):
         return ib
 
-    # 2) Fallback: look AFTER the receiver section starts ("Alıcı Banka")
-    # and pick the first IBAN there that isn't sender_iban
     raw_fold = (raw or "").casefold()
     idx = raw_fold.find("alıcı banka")
     if idx == -1:
@@ -86,7 +81,6 @@ def _extract_receiver_iban(raw: str, sender_iban: Optional[str]) -> Optional[str
             continue
         return cand
 
-    # 3) Last resort: any IBAN in whole doc excluding sender_iban
     for cand in _find_all_ibans(raw):
         if sender_iban and cand == sender_iban:
             continue
@@ -95,58 +89,45 @@ def _extract_receiver_iban(raw: str, sender_iban: Optional[str]) -> Optional[str
     return None
 
 
-def parse_albaraka(pdf_path: Path) -> Dict:
-    # Albaraka PDFs we saw are often image-based => OCR is the reliable source
-    raw = _extract_text(pdf_path, max_pages=1)
+def parse_albaraka(
+    pdf_path: Path,
+    *,
+    text_raw: Optional[str] = None,
+    text_norm: Optional[str] = None,  # unused
+) -> Dict:
+    # Prefer cached text if provided; otherwise read normally.
+    raw = text_raw if (text_raw is not None and text_raw.strip()) else _extract_text(pdf_path, max_pages=1)
+
+    # Albaraka PDFs are often image-based => OCR is the reliable source when text layer is empty
     if not raw.strip():
         raw = _ocr_first_page(pdf_path)
 
-    # Sender (OCR sometimes corrupts "HESAP" like HESA&P, so match loosely)
     sender_name = _find(
         raw,
         r"SAYIN\s+HES.{0,8}\s*SAHIBI\s*:\s*([^\n]+)",
     )
 
-    # Receiver
     receiver_name = _find(raw, r"Al[ıi]c[ıi]\s+Ad[ıi]\s*:\s*([^\n]+)")
 
     sender_iban = _extract_sender_iban(raw)
     receiver_iban = _extract_receiver_iban(raw, sender_iban)
 
-    # Amount
     amount = _find(raw, r"Tutar\s*:\s*([0-9\.\,]+)")
     if amount:
         amount = f"{amount} TL"
 
-    # Transaction time
     transaction_time = _find(
         raw,
-        r"ISLEM\s+TARIHI\s*:\s*([0-9]{2}\.[0-9]{2}\.[0-9]{4}\s+[0-9]{2}:[0-9]{2}:[0-9]{2})",
+        r"Tarih\s*:\s*([0-9]{2}\.[0-9]{2}\.[0-9]{4}\s*[0-9]{2}:[0-9]{2}:[0-9]{2})",
     )
 
-    # Receipt number (DEKONT NO/FİŞ NO)
-    receipt_no = _find(
-        raw,
-        r"DEKONT\s+NO/F\w*\s+NO\s*:\s*([0-9]+/[0-9]+)",
-    )
-
-    # FAST query number
-    transaction_ref = _find(raw, r"FAST\s+sorgu\s+numaraniz\s+([0-9]+)")
-
-    t = raw.upper()
-    tr_status = (
-        "completed"
-        if (
-            "PARA CIKISI GERCEKLESM" in t
-            or "PARA GIKIS1 GERCEKLESM" in t
-            or "DEKONT" in t
-        )
-        else "unknown"
-    )
+    receipt_no = _find(raw, r"Dekont\s+No\s*:\s*([0-9\/\-\s]+)")
+    transaction_ref = _find(raw, r"Referans\s*No\s*:\s*([0-9]+)")
 
     return {
-        "tr_status": tr_status,
+        "tr_status": "completed" if (raw or "").strip() else "unknown",
         "sender_name": sender_name,
+        "sender_iban": sender_iban,
         "receiver_name": receiver_name,
         "receiver_iban": receiver_iban,
         "amount": amount,

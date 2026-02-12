@@ -6,6 +6,7 @@ from starlette.requests import Request
 
 from app.detectors.bank_detect import detect_bank_variant
 from app.parsers.registry import parse_by_key
+from app.services.pdf_context import PDFContext
 from app.services.pdf_meta import extract_metadata_logs
 from app.services.pdf_store import get_pdf_by_token, store_pdf_for_view
 from app.services.pdf_view import build_pdf_wrapper_html
@@ -53,11 +54,23 @@ def download_pdf(token: str):
 @router.post("/check")
 def check_pdf(file: UploadFile = File(...)):
     path = save_upload_to_temp(file)
-    try:
-        detected = detect_bank_variant(path)
+    display_name = file.filename or "file.pdf"
 
+    try:
+        # Per-request cache (bytes + reader + first pages text)
+        ctx = PDFContext(path=path, display_name=display_name, max_pages_text=2)
+
+        # Detection: reuse normalized text
+        detected = detect_bank_variant(path, text_norm=ctx.text_norm)
+
+        # Parsing: Phase 2B — pass cached text to parsers that support it
         try:
-            data = parse_by_key(detected.get("key", ""), path)
+            data = parse_by_key(
+                detected.get("key", ""),
+                path,
+                text_raw=ctx.text_raw,
+                text_norm=ctx.text_norm,
+            )
         except Exception as e:
             data = {"error": f"{type(e).__name__}: {e}"}
 
@@ -66,15 +79,20 @@ def check_pdf(file: UploadFile = File(...)):
         else:
             data = {"tr_status": "unknown"}
 
-        # NEW: metadata logs (Python + ExifTool if installed)
-        meta = extract_metadata_logs(path, display_name=file.filename or "file.pdf")
+        # Metadata: reuse cached bytes/reader
+        meta = extract_metadata_logs(
+            path,
+            display_name=display_name,
+            pdf_bytes=ctx.pdf_bytes,
+            pdf_reader=ctx.reader,
+        )
 
-        token = store_pdf_for_view(path, file.filename or "file.pdf")
+        token = store_pdf_for_view(path, display_name)
         return {
-            "message": f"Uploaded: {file.filename}",
+            "message": f"Uploaded: {display_name}",
             "detected": detected,
             "data": data,
-            "meta": meta,  # NEW
+            "meta": meta,
             "view_url": f"/pdf/{token}",
             "download_url": f"/pdf/{token}/download",
         }

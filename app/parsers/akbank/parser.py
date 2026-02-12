@@ -118,44 +118,26 @@ def _receiver_name_after_iban(
         comp = re.sub(r"\s+", "", line).upper()
         if target in comp:
             for j in range(i + 1, min(i + 8, len(lines))):
-                m = re.match(r"^\s*:\s*(.+?)\s*$", lines[j])
-                if not m:
-                    continue
-                cand = _clean(m.group(1))
-                if not _looks_like_name(cand):
-                    continue
-                if sender_name and cand == sender_name:
-                    continue
-                return cand
+                cand = _clean(lines[j])
+                if _looks_like_name(cand) and (not sender_name or cand != sender_name):
+                    return cand
+            break
+
     return None
 
 
 def _any_colon_name(raw: str, sender_name: Optional[str]) -> Optional[str]:
-    for m in re.finditer(r"^\s*:\s*([^\n]+)\s*$", raw, flags=re.MULTILINE):
+    for m in re.finditer(r":\s*([^\n]+)", raw):
         cand = _clean(m.group(1))
-        if not _looks_like_name(cand):
-            continue
-        if sender_name and cand == sender_name:
-            continue
-        return cand
+        if _looks_like_name(cand) and (not sender_name or cand != sender_name):
+            return cand
     return None
 
 
-def _split_receipt_pair(
-    receipt_line: Optional[str],
-) -> tuple[Optional[str], Optional[str]]:
-    """
-    Input examples:
-      "30940173 / 360875 /"
-      "52586962 / 255724 /"
-
-    Output:
-      receipt_no = first number only
-      transaction_ref = second number
-    """
+def _split_receipt_pair(receipt_line: Optional[str]) -> tuple[Optional[str], Optional[str]]:
     if not receipt_line:
         return None, None
-    nums = re.findall(r"\d+", receipt_line)
+    nums = re.findall(r"[0-9]{3,}", receipt_line)
     if len(nums) >= 2:
         return nums[0], nums[1]
     if len(nums) == 1:
@@ -163,8 +145,13 @@ def _split_receipt_pair(
     return None, None
 
 
-def parse_akbank(pdf_path: Path) -> Dict:
-    raw = _extract_text(pdf_path, max_pages=2)
+def parse_akbank(
+    pdf_path: Path,
+    *,
+    text_raw: Optional[str] = None,
+    text_norm: Optional[str] = None,  # unused (kept for compatibility)
+) -> Dict:
+    raw = text_raw if (text_raw is not None and text_raw.strip()) else _extract_text(pdf_path, max_pages=2)
 
     names = re.findall(
         r"Adı\s+Soyadı/Unvan\s*:\s*(.+?)(?=\s+Adı\s+Soyadı/Unvan\s*:|\n|$)",
@@ -193,11 +180,9 @@ def parse_akbank(pdf_path: Path) -> Dict:
         r"İşlem\s+Tarihi/Saati\s*:\s*([0-9]{2}\.[0-9]{2}\.[0-9]{4}\s+[0-9]{2}:[0-9]{2}:[0-9]{2})",
     ) or _last_datetime(raw)
 
-    # This appears as: "30940173 / 360875 /"
     receipt_line = _find(raw, r"([0-9]{5,}\s*/\s*[0-9]{3,}\s*/)")
     receipt_no, transaction_ref = _split_receipt_pair(receipt_line)
 
-    # Receiver name fallback (for weird extraction ordering PDFs)
     if not receiver_name:
         receiver_name = _receiver_name_after_iban(
             raw, receiver_iban, sender_name

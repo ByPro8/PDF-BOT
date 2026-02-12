@@ -1,4 +1,5 @@
 import hashlib
+import io
 import re
 import shutil
 import subprocess
@@ -80,8 +81,14 @@ def _md5(b: bytes) -> str:
 # -------------------------
 
 
-def _format_python_meta(pdf_path: Path, display_name: str) -> str:
-    pdf_bytes = pdf_path.read_bytes()
+def _format_python_meta(
+    pdf_path: Path,
+    display_name: str,
+    pdf_bytes: Optional[bytes] = None,
+    reader: Optional[PdfReader] = None,
+) -> str:
+    if pdf_bytes is None:
+        pdf_bytes = pdf_path.read_bytes()
     st = pdf_path.stat()
 
     sha256 = _sha256(pdf_bytes)
@@ -99,8 +106,11 @@ def _format_python_meta(pdf_path: Path, display_name: str) -> str:
     startxref_val = _startxref_value(pdf_bytes)
     eof_count = _count_eof(pdf_bytes)
     obj_est = _estimate_obj_count(pdf_bytes)
-
-    reader = PdfReader(str(pdf_path))
+    if reader is None:
+        try:
+            reader = PdfReader(io.BytesIO(pdf_bytes))
+        except Exception:
+            reader = PdfReader(str(pdf_path))
     pages = len(reader.pages)
     encrypted = bool(getattr(reader, "is_encrypted", False))
 
@@ -351,12 +361,15 @@ def _run_exiftool(pdf_path: Path, display_name: str) -> str:
 
 
 def extract_metadata_logs(
-    pdf_path: Path, display_name: Optional[str] = None
+    pdf_path: Path,
+    display_name: Optional[str] = None,
+    pdf_bytes: Optional[bytes] = None,
+    pdf_reader: Optional[PdfReader] = None,
 ) -> Dict[str, str]:
     name = display_name or pdf_path.name
 
     try:
-        py = _format_python_meta(pdf_path, name)
+        py = _format_python_meta(pdf_path, name, pdf_bytes=pdf_bytes, reader=pdf_reader)
     except Exception as e:
         py = f"PythonMeta failed: {type(e).__name__}: {e}"
 

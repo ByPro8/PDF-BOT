@@ -25,7 +25,6 @@ def _find_group(raw: str, pattern: str) -> Optional[str]:
 
 
 def _iban(raw: str, key: str) -> Optional[str]:
-    # key like "IBAN" or "Alıcı IBAN"
     m = re.search(rf"{re.escape(key)}\s+(TR[0-9\s]{{20,}})", raw, flags=re.IGNORECASE)
     if not m:
         return None
@@ -33,7 +32,6 @@ def _iban(raw: str, key: str) -> Optional[str]:
 
 
 def _money_tl(raw: str, key: str) -> Optional[str]:
-    # key like "Tutar" or "Masraf"
     m = re.search(rf"{re.escape(key)}\s+([0-9\.\,]+)\s*TL", raw, flags=re.IGNORECASE)
     if not m:
         return None
@@ -49,14 +47,18 @@ def _detect_tr_status(raw: str) -> str:
         return "canceled"
     if "beklemede" in t or "isleniyor" in t or "onay bekliyor" in t:
         return "pending"
-    # Deniz FAST PDFs are "Dekont ..." receipts → treat as completed
     if "dekont" in t:
         return "completed"
     return "unknown"
 
 
-def parse_denizbank(pdf_path: Path) -> Dict:
-    raw = _extract_text(pdf_path, max_pages=2)
+def parse_denizbank(
+    pdf_path: Path,
+    *,
+    text_raw: Optional[str] = None,
+    text_norm: Optional[str] = None,  # unused
+) -> Dict:
+    raw = text_raw if (text_raw is not None and text_raw.strip()) else _extract_text(pdf_path, max_pages=2)
 
     sender_name = _find_group(raw, r"Adı\s+Soyadı\s+([^\n]+)")
     sender_iban = _iban(raw, "IBAN")
@@ -66,9 +68,15 @@ def parse_denizbank(pdf_path: Path) -> Dict:
 
     amount = _money_tl(raw, "Tutar")
 
-    transaction_time = _find_group(raw, r"İşlem\s+Tarihi\s+([0-9]{2}\.[0-9]{2}\.[0-9]{4}\s+[0-9]{2}:[0-9]{2}:[0-9]{2})")
+    transaction_time = _find_group(
+        raw,
+        r"İşlem\s+Tarihi\s+([0-9]{2}\.[0-9]{2}\.[0-9]{4}\s+[0-9]{2}:[0-9]{2}:[0-9]{2})",
+    )
 
-    receipt_no = _find_group(raw, r"Referans\s+Bilgisi\s*:\s*([0-9]{8}\s*-\s*[0-9]{4}\s*-\s*[0-9]+)")
+    receipt_no = _find_group(
+        raw,
+        r"Referans\s+Bilgisi\s*:\s*([0-9]{8}\s*-\s*[0-9]{4}\s*-\s*[0-9]+)",
+    )
     transaction_ref = _find_group(raw, r"FAST\s+Sorgu\s+Numarası\s*:\s*([0-9]+)")
 
     return {
@@ -79,6 +87,6 @@ def parse_denizbank(pdf_path: Path) -> Dict:
         "receiver_iban": receiver_iban,
         "amount": amount,
         "transaction_time": transaction_time,
-        "receipt_no": receipt_no,          # "Referans Bilgisi : ..."
-        "transaction_ref": transaction_ref # "FAST Sorgu Numarası: ..."
+        "receipt_no": receipt_no,
+        "transaction_ref": transaction_ref,
     }
